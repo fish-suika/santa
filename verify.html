@@ -47,6 +47,10 @@ const CFG = {
   pickupRange: 2.5,     // そりからこの距離（横）以内なら受け取れる
   dropDelay: 1.4,       // 落としてから、受け取り地点で再開するまでの秒数
 
+  // 配達
+  chimneyHalf: 0.55,    // 煙突の上面（縁）の幅の半分
+  beaconMinY: 10,       // 足元がこの高さ以上のときだけ、配達先の光の柱が見える
+
   // カメラ（サンタの後ろ）
   camDist: 7,
   camLookHeight: 1.4,   // 足元からどれだけ上を見るか
@@ -70,6 +74,7 @@ const COURSE = {
   start: { x: 0, z: 45 },
   sleigh: { x: 9, z: 44 },     // プレゼントの受け取り地点（そり）
   respawn: { x: 7, z: 44 },    // 落ちたときに戻る場所（そりの横）
+  targets: [{ x: -17, z: 30 }, { x: 28, z: -38 }],   // 配達先の家（中心）。この順に届ける
 };
 // ===== 当たり判定（three.js に依存しない。verify から直接試す） =====
 // 箱は {minX,maxX,minY,maxY,minZ,maxZ}。街の当たり判定はすべてこの箱で表す。
@@ -270,8 +275,14 @@ function cameraPlace(target, yaw, pitch, boxes, want) {
 }
 // ===== 配達の進み具合（three.js に依存しない） =====
 // state: 'play'（ふつう）／'dropped'（プレゼントを落とした。dropDelay 秒後に受け取り地点から再開）
-function newRun() {
-  return { carrying: false, state: 'play', timer: 0, drops: 0, crossed: false };
+// targets: 配達先の煙突 {x, y, z, front} を届ける順に並べたもの。front は「その家の前」（届けた後に落としたら戻る場所）
+function newRun(targets) {
+  return {
+    carrying: false, state: 'play', timer: 0, drops: 0,
+    targets: targets || [], target: 0,   // target: 次に届ける煙突の番号
+    respawn: null,                       // 落としたときに戻る場所（null なら最初のそりの横）
+    time: 0, cleared: false,
+  };
 }
 
 // 受け取り地点 p の近く（横 pickupRange 以内、高さ 2m 未満）にいるか
@@ -281,7 +292,7 @@ function nearPickup(s, p) {
 
 // E を押したとき。受け取れたら true
 function tryPickup(run, s, p) {
-  if (run.state !== 'play' || run.carrying || !nearPickup(s, p)) return false;
+  if (run.cleared || run.state !== 'play' || run.carrying || !nearPickup(s, p)) return false;
   run.carrying = true;
   return true;
 }
@@ -311,22 +322,57 @@ function stepRun(run, s, dt, respawn) {
   if (run.state === 'dropped') {
     run.timer -= dt;
     if (run.timer > 0) return null;
-    placeAt(s, respawn);
+    placeAt(s, run.respawn || respawn);
     run.state = 'play';
     run.carrying = true;   // 受け取り地点から、プレゼントを持った状態でやり直し
     return 'respawn';
   }
   if (s.pos.y >= CFG.fallY) return null;
   if (dropPresent(run)) return 'dropped';
-  placeAt(s, respawn);
+  placeAt(s, run.respawn || respawn);
   return 'fell';
 }
 
-// 持ったまま向こう岸に立った瞬間に 1 回だけ true（Phase 4 で配達に置き換える仮のゴール）
-function checkCrossed(run, s) {
-  if (run.crossed || !run.carrying || !s.onGround || s.pos.z > -COURSE.riverHalf) return false;
-  run.crossed = true;
-  return true;
+
+// 煙突 ch の上に立っているか（縁に体が少しでも乗っていて、足元の高さが煙突の上面）
+function onChimney(s, ch) {
+  const r = CFG.chimneyHalf + CFG.santaHalf;
+  return s.onGround && Math.abs(s.pos.y - ch.y) < 0.05 && Math.abs(s.pos.x - ch.x) < r && Math.abs(s.pos.z - ch.z) < r;
+}
+
+// E を押したとき。chimneys は街のすべての煙突。
+// 返り値: 'delivered'（届けた）／'cleared'（最後の 1 軒を届けた）／'wrong'（ほかの家の煙突）／null（何も起きない）
+function tryDeliver(run, s, chimneys) {
+  if (run.state !== 'play' || !run.carrying || run.cleared) return null;
+  const ch = chimneys.find(c => onChimney(s, c));
+  if (!ch) return null;
+  if (ch !== run.targets[run.target]) return 'wrong';
+  run.target++;
+  run.respawn = ch.front;
+  if (run.target >= run.targets.length) {
+    run.cleared = true;
+    run.carrying = false;
+    return 'cleared';
+  }
+  return 'delivered';   // 背中の袋から次のプレゼントを出すので、持ったまま
+}
+
+// タイム。クリアしたら止まる
+function tickTime(run, dt) {
+  if (!run.cleared) run.time += dt;
+}
+
+// 自己ベスト best（無ければ null）と今回のタイム time から、新しいベストと更新したかを返す
+function bestAfter(best, time) {
+  if (best === null || time < best) return { best: time, isNew: true };
+  return { best, isNew: false };
+}
+
+// 秒を「分:秒.1桁」に（83.42 → '1:23.4'）。0.1 秒未満は切り捨て（59.96 が '0:60.0' にならないように）
+function fmtTime(sec) {
+  const tenths = Math.floor(sec * 10);
+  const m = Math.floor(tenths / 600), s = (tenths - m * 600) / 10;
+  return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1);
 }
 // ===== 検証ハーネス =====
 const __results = [];
@@ -711,13 +757,84 @@ test('dropPresent: 持っていれば落とす。持っていなければ何も�
   eq(dropPresent(newRun()), false);
 });
 
-test('checkCrossed: 持って向こう岸に立った瞬間だけ true。持っていなければ false', () => {
-  const s = newSanta(0, -COURSE.riverHalf - 3);
-  s.onGround = true;
-  eq(checkCrossed(newRun(), s), false);
-  const r = carryingRun();
-  eq(checkCrossed(r, s), true);
-  eq(checkCrossed(r, s), false);
+// ===== 配達 =====
+function chim(x, y, z) { return { x, y, z, front: { x, z: z + 5 } }; }
+function standOn(ch) { const s = newSanta(ch.x, ch.z); s.pos.y = ch.y; s.onGround = true; return s; }
+
+test('onChimney: 煙突の上に立っていれば true。横にずれたり空中・低い所なら false', () => {
+  const ch = chim(0, 8, 0);
+  eq(onChimney(standOn(ch), ch), true);
+  const s = standOn(ch); s.pos.x = 1.0; eq(onChimney(s, ch), false, '横に 1m');
+  const s2 = standOn(ch); s2.pos.x = 0.9; eq(onChimney(s2, ch), true, '横に 0.9m（体が縁に乗っている）');
+  const a = standOn(ch); a.onGround = false; eq(onChimney(a, ch), false, '空中');
+  const low = standOn(ch); low.pos.y = 5; eq(onChimney(low, ch), false, '屋根の上（煙突より低い）');
+});
+
+test('tryDeliver: プレゼントを持っていなければ何も起きない', () => {
+  const A = chim(0, 8, 0), r = newRun([A]);
+  eq(tryDeliver(r, standOn(A), [A]), null);
+});
+
+test('tryDeliver: 目的の煙突で届けると次の目的へ。持ったまま、戻る場所はその家の前', () => {
+  const A = chim(0, 8, 0), B = chim(30, 8, 0), r = newRun([A, B]);
+  r.carrying = true;
+  eq(tryDeliver(r, standOn(A), [A, B]), 'delivered');
+  eq(r.target, 1);
+  eq(r.carrying, true);
+  eq(r.respawn, A.front);
+});
+
+test('tryDeliver: 違う家の煙突は wrong で、何も変わらない', () => {
+  const A = chim(0, 8, 0), B = chim(30, 8, 0), r = newRun([A, B]);
+  r.carrying = true;
+  eq(tryDeliver(r, standOn(B), [A, B]), 'wrong');
+  eq(r.target, 0);
+  eq(r.carrying, true);
+});
+
+test('tryDeliver: 最後の 1 軒で cleared。プレゼントはもう持っていない', () => {
+  const A = chim(0, 8, 0), r = newRun([A]);
+  r.carrying = true;
+  eq(tryDeliver(r, standOn(A), [A]), 'cleared');
+  eq(r.cleared, true);
+  eq(r.carrying, false);
+  eq(tryDeliver(r, standOn(A), [A]), null, 'クリア後は何も起きない');
+  eq(tryPickup(r, standOn(A), { x: 0, z: 0, y: 8 }), false, 'クリア後はそりでも受け取れない');
+});
+
+test('stepRun: 1 軒届けた後に落とすと、その家の前からやり直す', () => {
+  const A = chim(0, 8, 0), B = chim(30, 8, 0), r = newRun([A, B]);
+  r.carrying = true;
+  const s = standOn(A);
+  tryDeliver(r, s, [A, B]);
+  s.pos.y = -1.5;
+  eq(stepRun(r, s, 1 / 60, RESP), 'dropped');
+  let res = null;
+  for (let i = 0; i < 200 && !res; i++) res = stepRun(r, s, 1 / 60, RESP);
+  eq(res, 'respawn');
+  eq([s.pos.x, s.pos.z], [0, 5]);
+  eq(r.carrying, true);
+});
+
+test('tickTime: クリアするまで時間が進み、クリア後は止まる', () => {
+  const r = newRun();
+  tickTime(r, 1.5); tickTime(r, 0.5);
+  near(r.time, 2, 1e-9);
+  r.cleared = true;
+  tickTime(r, 3);
+  near(r.time, 2, 1e-9);
+});
+
+test('bestAfter: 初回は記録、速ければ更新、遅ければそのまま', () => {
+  eq(bestAfter(null, 90), { best: 90, isNew: true });
+  eq(bestAfter(90, 80), { best: 80, isNew: true });
+  eq(bestAfter(80, 85), { best: 80, isNew: false });
+});
+
+test('fmtTime: 分:秒.1桁（0.1 秒未満は切り捨て）', () => {
+  eq(fmtTime(83.42), '1:23.4');
+  eq(fmtTime(5), '0:05.0');
+  eq(fmtTime(59.96), '0:59.9');
 });
 
 // ===== 結果表示 =====

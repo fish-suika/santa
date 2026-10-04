@@ -381,13 +381,84 @@ test('dropPresent: 持っていれば落とす。持っていなければ何も�
   eq(dropPresent(newRun()), false);
 });
 
-test('checkCrossed: 持って向こう岸に立った瞬間だけ true。持っていなければ false', () => {
-  const s = newSanta(0, -COURSE.riverHalf - 3);
-  s.onGround = true;
-  eq(checkCrossed(newRun(), s), false);
-  const r = carryingRun();
-  eq(checkCrossed(r, s), true);
-  eq(checkCrossed(r, s), false);
+// ===== 配達 =====
+function chim(x, y, z) { return { x, y, z, front: { x, z: z + 5 } }; }
+function standOn(ch) { const s = newSanta(ch.x, ch.z); s.pos.y = ch.y; s.onGround = true; return s; }
+
+test('onChimney: 煙突の上に立っていれば true。横にずれたり空中・低い所なら false', () => {
+  const ch = chim(0, 8, 0);
+  eq(onChimney(standOn(ch), ch), true);
+  const s = standOn(ch); s.pos.x = 1.0; eq(onChimney(s, ch), false, '横に 1m');
+  const s2 = standOn(ch); s2.pos.x = 0.9; eq(onChimney(s2, ch), true, '横に 0.9m（体が縁に乗っている）');
+  const a = standOn(ch); a.onGround = false; eq(onChimney(a, ch), false, '空中');
+  const low = standOn(ch); low.pos.y = 5; eq(onChimney(low, ch), false, '屋根の上（煙突より低い）');
+});
+
+test('tryDeliver: プレゼントを持っていなければ何も起きない', () => {
+  const A = chim(0, 8, 0), r = newRun([A]);
+  eq(tryDeliver(r, standOn(A), [A]), null);
+});
+
+test('tryDeliver: 目的の煙突で届けると次の目的へ。持ったまま、戻る場所はその家の前', () => {
+  const A = chim(0, 8, 0), B = chim(30, 8, 0), r = newRun([A, B]);
+  r.carrying = true;
+  eq(tryDeliver(r, standOn(A), [A, B]), 'delivered');
+  eq(r.target, 1);
+  eq(r.carrying, true);
+  eq(r.respawn, A.front);
+});
+
+test('tryDeliver: 違う家の煙突は wrong で、何も変わらない', () => {
+  const A = chim(0, 8, 0), B = chim(30, 8, 0), r = newRun([A, B]);
+  r.carrying = true;
+  eq(tryDeliver(r, standOn(B), [A, B]), 'wrong');
+  eq(r.target, 0);
+  eq(r.carrying, true);
+});
+
+test('tryDeliver: 最後の 1 軒で cleared。プレゼントはもう持っていない', () => {
+  const A = chim(0, 8, 0), r = newRun([A]);
+  r.carrying = true;
+  eq(tryDeliver(r, standOn(A), [A]), 'cleared');
+  eq(r.cleared, true);
+  eq(r.carrying, false);
+  eq(tryDeliver(r, standOn(A), [A]), null, 'クリア後は何も起きない');
+  eq(tryPickup(r, standOn(A), { x: 0, z: 0, y: 8 }), false, 'クリア後はそりでも受け取れない');
+});
+
+test('stepRun: 1 軒届けた後に落とすと、その家の前からやり直す', () => {
+  const A = chim(0, 8, 0), B = chim(30, 8, 0), r = newRun([A, B]);
+  r.carrying = true;
+  const s = standOn(A);
+  tryDeliver(r, s, [A, B]);
+  s.pos.y = -1.5;
+  eq(stepRun(r, s, 1 / 60, RESP), 'dropped');
+  let res = null;
+  for (let i = 0; i < 200 && !res; i++) res = stepRun(r, s, 1 / 60, RESP);
+  eq(res, 'respawn');
+  eq([s.pos.x, s.pos.z], [0, 5]);
+  eq(r.carrying, true);
+});
+
+test('tickTime: クリアするまで時間が進み、クリア後は止まる', () => {
+  const r = newRun();
+  tickTime(r, 1.5); tickTime(r, 0.5);
+  near(r.time, 2, 1e-9);
+  r.cleared = true;
+  tickTime(r, 3);
+  near(r.time, 2, 1e-9);
+});
+
+test('bestAfter: 初回は記録、速ければ更新、遅ければそのまま', () => {
+  eq(bestAfter(null, 90), { best: 90, isNew: true });
+  eq(bestAfter(90, 80), { best: 80, isNew: true });
+  eq(bestAfter(80, 85), { best: 80, isNew: false });
+});
+
+test('fmtTime: 分:秒.1桁（0.1 秒未満は切り捨て）', () => {
+  eq(fmtTime(83.42), '1:23.4');
+  eq(fmtTime(5), '0:05.0');
+  eq(fmtTime(59.96), '0:59.9');
 });
 
 // ===== 結果表示 =====

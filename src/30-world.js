@@ -73,7 +73,8 @@ function house(cx, cz, w, d, wallH, wallColor) {
   }
   addLights(pts, cols);
 
-  W.houses.push({ x: cx, z: cz, w, d, wallH, chimney: { x: chX, y: wallH + chH + 0.2, z: chZ } });
+  W.houses.push({ x: cx, z: cz, w, d, wallH,
+    chimney: { x: chX, y: wallH + chH + 0.2, z: chZ, front: { x: cx, z: cz + d / 2 + 2.5 } } });
 }
 
 // 車。alongX なら X 方向に長い。屋根に乗れる。
