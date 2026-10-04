@@ -327,7 +327,7 @@ function newRun(targets) {
     carrying: false, state: 'play', timer: 0, drops: 0,
     targets: targets || [], target: 0,   // target: 次に届ける煙突の番号
     respawn: null,                       // 落としたときに戻る場所（null なら最初のそりの横）
-    time: 0, cleared: false,
+    cleared: false,
   };
 }
 
@@ -403,24 +403,6 @@ function tryDeliver(run, s, chimneys) {
     return 'cleared';
   }
   return 'delivered';   // 背中の袋から次のプレゼントを出すので、持ったまま
-}
-
-// タイム。クリアしたら止まる
-function tickTime(run, dt) {
-  if (!run.cleared) run.time += dt;
-}
-
-// 自己ベスト best（無ければ null）と今回のタイム time から、新しいベストと更新したかを返す
-function bestAfter(best, time) {
-  if (best === null || time < best) return { best: time, isNew: true };
-  return { best, isNew: false };
-}
-
-// 秒を「分:秒.1桁」に（83.42 → '1:23.4'）。0.1 秒未満は切り捨て（59.96 が '0:60.0' にならないように）
-function fmtTime(sec) {
-  const tenths = Math.floor(sec * 10);
-  const m = Math.floor(tenths / 600), s = (tenths - m * 600) / 10;
-  return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1);
 }
 // ===== 障害：電線と走る車（three.js に依存しない） =====
 
@@ -1066,27 +1048,6 @@ test('stepRun: 1 軒届けた後に落とすと、その家の前からやり直
   eq(res, 'respawn');
   eq([s.pos.x, s.pos.z], [0, 5]);
   eq(r.carrying, true);
-});
-
-test('tickTime: クリアするまで時間が進み、クリア後は止まる', () => {
-  const r = newRun();
-  tickTime(r, 1.5); tickTime(r, 0.5);
-  near(r.time, 2, 1e-9);
-  r.cleared = true;
-  tickTime(r, 3);
-  near(r.time, 2, 1e-9);
-});
-
-test('bestAfter: 初回は記録、速ければ更新、遅ければそのまま', () => {
-  eq(bestAfter(null, 90), { best: 90, isNew: true });
-  eq(bestAfter(90, 80), { best: 80, isNew: true });
-  eq(bestAfter(80, 85), { best: 80, isNew: false });
-});
-
-test('fmtTime: 分:秒.1桁（0.1 秒未満は切り捨て）', () => {
-  eq(fmtTime(83.42), '1:23.4');
-  eq(fmtTime(5), '0:05.0');
-  eq(fmtTime(59.96), '0:59.9');
 });
 
 // ===== 塀（高さで越える） =====

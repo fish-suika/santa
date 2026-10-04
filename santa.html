@@ -64,11 +64,8 @@
   body.touch #actBtn{display:block}
   #actBtn:active{background:rgba(255,210,122,.8)}
 
-  /* ---- タイム（右上）。左上の目的と重ならないよう目的の幅を詰める ---- */
+  /* ---- 左上の目的の幅（右上の空き） ---- */
   #obj{max-width:calc(100vw - 140px)}
-  #timer{position:fixed;right:16px;top:16px;z-index:5;font-size:18px;font-variant-numeric:tabular-nums;letter-spacing:.05em;
-    background:rgba(8,14,36,.62);padding:6px 12px;border-radius:4px;text-shadow:0 1px 6px #000;pointer-events:none;display:none}
-  #timer.on{display:block}
 
   /* ---- クリア画面 ---- */
   #clear{position:fixed;inset:0;z-index:12;display:none;flex-direction:column;align-items:center;justify-content:center;
@@ -76,9 +73,6 @@
   #clear.on{display:flex}
   #clear h2{font-size:clamp(28px,6vw,52px);letter-spacing:.08em;color:var(--gold);text-shadow:0 2px 18px rgba(0,0,0,.6)}
   #clear p{font-size:16px;letter-spacing:.12em}
-  #clear .time{font-size:22px}
-  #clear .time b{font-size:30px;font-variant-numeric:tabular-nums}
-  #clearBest{color:var(--gold)}
   #againBtn{margin-top:10px;font:700 18px var(--jp);letter-spacing:.15em;color:#fff;background:var(--red);border:0;
     border-radius:28px;padding:12px 34px;cursor:pointer}
 </style>
@@ -96,12 +90,9 @@
 <div id="obj"><b>いまやること</b><span id="objText"></span></div>
 <div id="toast"></div>
 <div id="prompt"></div>
-<div id="timer"></div>
 <div id="clear">
   <h2>ぜんぶ届けた！</h2>
   <p>メリークリスマス</p>
-  <p class="time">タイム <b id="clearTime"></b></p>
-  <p id="clearBest"></p>
   <button id="againBtn">もう一度</button>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -413,7 +404,7 @@ function newRun(targets) {
     carrying: false, state: 'play', timer: 0, drops: 0,
     targets: targets || [], target: 0,   // target: 次に届ける煙突の番号
     respawn: null,                       // 落としたときに戻る場所（null なら最初のそりの横）
-    time: 0, cleared: false,
+    cleared: false,
   };
 }
 
@@ -489,24 +480,6 @@ function tryDeliver(run, s, chimneys) {
     return 'cleared';
   }
   return 'delivered';   // 背中の袋から次のプレゼントを出すので、持ったまま
-}
-
-// タイム。クリアしたら止まる
-function tickTime(run, dt) {
-  if (!run.cleared) run.time += dt;
-}
-
-// 自己ベスト best（無ければ null）と今回のタイム time から、新しいベストと更新したかを返す
-function bestAfter(best, time) {
-  if (best === null || time < best) return { best: time, isNew: true };
-  return { best, isNew: false };
-}
-
-// 秒を「分:秒.1桁」に（83.42 → '1:23.4'）。0.1 秒未満は切り捨て（59.96 が '0:60.0' にならないように）
-function fmtTime(sec) {
-  const tenths = Math.floor(sec * 10);
-  const m = Math.floor(tenths / 600), s = (tenths - m * 600) / 10;
-  return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1);
 }
 // ===== 障害：電線と走る車（three.js に依存しない） =====
 
@@ -1886,34 +1859,12 @@ function updateHud(dt) {
   if (HUD.toastTimer <= 0) document.getElementById('toast').classList.remove('on');
 }
 
-// 右上のタイム
-function setTimer(sec) {
-  const el = document.getElementById('timer');
-  const txt = fmtTime(sec);
-  if (el.textContent !== txt) el.textContent = txt;
-  el.classList.add('on');
-}
-
 // クリア画面
-function showClear(time, best, isNew) {
-  document.getElementById('clearTime').textContent = fmtTime(time);
-  document.getElementById('clearBest').textContent = isNew ? '自己ベスト更新！' : '自己ベスト ' + fmtTime(best);
+function showClear() {
   document.getElementById('clear').classList.add('on');
 }
 function hideClear() {
   document.getElementById('clear').classList.remove('on');
-}
-
-// 自己ベスト（この端末のブラウザに保存。保存できない環境では null のまま）
-const BEST_KEY = 'santa-todokete.best';
-function loadBest() {
-  try {
-    const v = parseFloat(localStorage.getItem(BEST_KEY));
-    return isFinite(v) ? v : null;
-  } catch (e) { return null; }
-}
-function saveBest(v) {
-  try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) { /* 保存できなくても遊べる */ }
 }
 // ===== 起動とメインループ =====
 (function boot() {
@@ -1941,7 +1892,6 @@ function saveBest(v) {
   const chimneys = W.houses.map(h => h.chimney);
   const targets = COURSE.targets.map(tg => W.houses.find(h => h.x === tg.x && h.z === tg.z).chimney);
   let run = newRun(targets);
-  let best = loadBest();
   const beacon = makeBeacon();
 
   function objectiveText() {
@@ -1954,13 +1904,10 @@ function saveBest(v) {
     // カメラの前方 14m・サンタの 3m 上のあたりに花火（高すぎると画角の上にはみ出す）
     const a = camAxes(CAM.yaw);
     celebrate({ x: santa.pos.x + a.fx * 14, y: santa.pos.y + 3, z: santa.pos.z + a.fz * 14 });
-    const r = bestAfter(best, run.time);
-    best = r.best;
-    if (r.isNew) saveBest(best);
     setObjective('');
     setPrompt(null);
     setTimeout(() => {
-      showClear(run.time, best, r.isNew);
+      showClear();
       if (document.exitPointerLock) document.exitPointerLock();
     }, 2600);
   }
@@ -2102,8 +2049,6 @@ function saveBest(v) {
         clearThrown(sm);
         showToast(run.target === 0 ? 'そりからやり直し' : '届けた家の前からやり直し', 1.4);
       }
-      tickTime(run, dt);
-      setTimer(run.time);
       const goal = run.targets[run.target];
       const canPick = !run.carrying && run.state === 'play' && nearPickup(santa, COURSE.sleigh);
       const canGive = run.carrying && run.state === 'play' && goal && nearChimney(santa, goal);

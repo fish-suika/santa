@@ -6,7 +6,7 @@ function newRun(targets) {
     carrying: false, state: 'play', timer: 0, drops: 0,
     targets: targets || [], target: 0,   // target: 次に届ける煙突の番号
     respawn: null,                       // 落としたときに戻る場所（null なら最初のそりの横）
-    time: 0, cleared: false,
+    cleared: false,
   };
 }
 
@@ -82,22 +82,4 @@ function tryDeliver(run, s, chimneys) {
     return 'cleared';
   }
   return 'delivered';   // 背中の袋から次のプレゼントを出すので、持ったまま
-}
-
-// タイム。クリアしたら止まる
-function tickTime(run, dt) {
-  if (!run.cleared) run.time += dt;
-}
-
-// 自己ベスト best（無ければ null）と今回のタイム time から、新しいベストと更新したかを返す
-function bestAfter(best, time) {
-  if (best === null || time < best) return { best: time, isNew: true };
-  return { best, isNew: false };
-}
-
-// 秒を「分:秒.1桁」に（83.42 → '1:23.4'）。0.1 秒未満は切り捨て（59.96 が '0:60.0' にならないように）
-function fmtTime(sec) {
-  const tenths = Math.floor(sec * 10);
-  const m = Math.floor(tenths / 600), s = (tenths - m * 600) / 10;
-  return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1);
 }

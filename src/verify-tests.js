@@ -452,27 +452,6 @@ test('stepRun: 1 軒届けた後に落とすと、その家の前からやり直
   eq(r.carrying, true);
 });
 
-test('tickTime: クリアするまで時間が進み、クリア後は止まる', () => {
-  const r = newRun();
-  tickTime(r, 1.5); tickTime(r, 0.5);
-  near(r.time, 2, 1e-9);
-  r.cleared = true;
-  tickTime(r, 3);
-  near(r.time, 2, 1e-9);
-});
-
-test('bestAfter: 初回は記録、速ければ更新、遅ければそのまま', () => {
-  eq(bestAfter(null, 90), { best: 90, isNew: true });
-  eq(bestAfter(90, 80), { best: 80, isNew: true });
-  eq(bestAfter(80, 85), { best: 80, isNew: false });
-});
-
-test('fmtTime: 分:秒.1桁（0.1 秒未満は切り捨て）', () => {
-  eq(fmtTime(83.42), '1:23.4');
-  eq(fmtTime(5), '0:05.0');
-  eq(fmtTime(59.96), '0:59.9');
-});
-
 // ===== 塀（高さで越える） =====
 // 塀の手前の地面に、塀から 4m 離して高さ h の台を置き、台の上を塀へ向かって走って縁で跳ぶ。塀の上か向こうに立てたら true
 function tryOver(h) {

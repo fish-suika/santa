@@ -24,7 +24,6 @@
   const chimneys = W.houses.map(h => h.chimney);
   const targets = COURSE.targets.map(tg => W.houses.find(h => h.x === tg.x && h.z === tg.z).chimney);
   let run = newRun(targets);
-  let best = loadBest();
   const beacon = makeBeacon();
 
   function objectiveText() {
@@ -37,13 +36,10 @@
     // カメラの前方 14m・サンタの 3m 上のあたりに花火（高すぎると画角の上にはみ出す）
     const a = camAxes(CAM.yaw);
     celebrate({ x: santa.pos.x + a.fx * 14, y: santa.pos.y + 3, z: santa.pos.z + a.fz * 14 });
-    const r = bestAfter(best, run.time);
-    best = r.best;
-    if (r.isNew) saveBest(best);
     setObjective('');
     setPrompt(null);
     setTimeout(() => {
-      showClear(run.time, best, r.isNew);
+      showClear();
       if (document.exitPointerLock) document.exitPointerLock();
     }, 2600);
   }
@@ -185,8 +181,6 @@
         clearThrown(sm);
         showToast(run.target === 0 ? 'そりからやり直し' : '届けた家の前からやり直し', 1.4);
       }
-      tickTime(run, dt);
-      setTimer(run.time);
       const goal = run.targets[run.target];
       const canPick = !run.carrying && run.state === 'play' && nearPickup(santa, COURSE.sleigh);
       const canGive = run.carrying && run.state === 'play' && goal && nearChimney(santa, goal);

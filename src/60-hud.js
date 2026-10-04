@@ -28,32 +28,10 @@ function updateHud(dt) {
   if (HUD.toastTimer <= 0) document.getElementById('toast').classList.remove('on');
 }
 
-// 右上のタイム
-function setTimer(sec) {
-  const el = document.getElementById('timer');
-  const txt = fmtTime(sec);
-  if (el.textContent !== txt) el.textContent = txt;
-  el.classList.add('on');
-}
-
 // クリア画面
-function showClear(time, best, isNew) {
-  document.getElementById('clearTime').textContent = fmtTime(time);
-  document.getElementById('clearBest').textContent = isNew ? '自己ベスト更新！' : '自己ベスト ' + fmtTime(best);
+function showClear() {
   document.getElementById('clear').classList.add('on');
 }
 function hideClear() {
   document.getElementById('clear').classList.remove('on');
-}
-
-// 自己ベスト（この端末のブラウザに保存。保存できない環境では null のまま）
-const BEST_KEY = 'santa-todokete.best';
-function loadBest() {
-  try {
-    const v = parseFloat(localStorage.getItem(BEST_KEY));
-    return isFinite(v) ? v : null;
-  } catch (e) { return null; }
-}
-function saveBest(v) {
-  try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) { /* 保存できなくても遊べる */ }
 }
