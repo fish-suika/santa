@@ -283,6 +283,34 @@ test('着地: 着地した瞬間の落ちる速さを landSpeed に残す', () =
   eq(land > 15 && land < 18, true, '落ちる速さ ' + land.toFixed(1) + '（5m 落下で約 17.3）');
 });
 
+// ===== 川（高さで届く距離が変わる） =====
+// 手前の岸（z = R〜）の縁に高さ h の建物を置き、屋上を -Z へ走って縁で跳ぶ。向こう岸（z = 〜-R）に立てたら true
+function tryCross(h) {
+  const R = COURSE.riverHalf;
+  const boxes = [makeBox(0, -4, R + 23, 40, 4, 46), makeBox(0, -4, -R - 23, 40, 4, 46)];
+  if (h > 0) boxes.push(makeBox(0, 0, R + 5, 10, h, 10));
+  const s = newSanta(0, R + 8);
+  s.pos.y = h;
+  walk(s, STOP, 0, 0.2, boxes);
+  let jumped = false;
+  for (let i = 0; i < 600; i++) {
+    const jump = !jumped && s.pos.z < R - 0.2;   // 縁から体が少しはみ出したところで跳ぶ
+    if (jump) jumped = true;
+    santaStep(s, { x: 0, z: 1, jump }, 0, 1 / 60, boxes);
+    if (jumped && s.onGround) break;
+    if (s.pos.y < CFG.fallY) break;
+  }
+  return s.onGround && Math.abs(s.pos.y) < 0.01 && s.pos.z < 0;
+}
+
+test('川: 地面から走って跳んでも向こう岸に届かない', () => {
+  eq(tryCross(0), false);
+});
+
+test('川: 19m の建物の屋上から走って跳べば届く', () => {
+  eq(tryCross(19), true);
+});
+
 // ===== 結果表示 =====
 (function () {
   const out = document.getElementById('out');
