@@ -33,6 +33,9 @@
 
   function finish() {
     sndClear();
+    // カメラの前方 14m・サンタの 9m 上のあたりに花火
+    const a = camAxes(CAM.yaw);
+    celebrate({ x: santa.pos.x + a.fx * 14, y: santa.pos.y + 9, z: santa.pos.z + a.fz * 14 });
     const r = bestAfter(best, run.time);
     best = r.best;
     if (r.isNew) saveBest(best);
@@ -41,7 +44,7 @@
     setTimeout(() => {
       showClear(run.time, best, r.isNew);
       if (document.exitPointerLock) document.exitPointerLock();
-    }, 900);
+    }, 2600);
   }
 
   document.getElementById('againBtn').addEventListener('click', () => {

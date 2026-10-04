@@ -1,5 +1,5 @@
 // ===== 配達の見た目（光の柱・煙突へ入るプレゼント） =====
-const FX = { down: null };
+const FX = { down: null, bursts: [], pending: [], clock: 0 };
 
 function lerp(a, b, k) { return a + (b - a) * k; }
 
@@ -35,6 +35,7 @@ function sendDown(sm, ch) {
 }
 
 function updateFx(dt) {
+  updateBursts(dt);
   const d = FX.down;
   if (!d) return;
   d.t += dt;
@@ -50,4 +51,54 @@ function updateFx(dt) {
   d.mesh.position.set(d.ch.x, d.ch.y + 1.2 - k2 * 2.2, d.ch.z);
   d.mesh.scale.setScalar(1 - k2 * 0.5);
   if (k2 >= 1) { W.scene.remove(d.mesh); FX.down = null; }
+}
+
+// クリアの花火。center のまわり（横 ±8m・高さ +0〜8m）に、0.45 秒おきに 5 発
+function celebrate(center) {
+  FX.clock = 0;
+  FX.pending = [];
+  for (let k = 0; k < 5; k++) {
+    FX.pending.push({ at: k * 0.45, x: center.x + (Math.random() - 0.5) * 16, y: center.y + Math.random() * 8, z: center.z + (Math.random() - 0.5) * 16 });
+  }
+}
+
+// 1 発ぶん：140 粒が四方へ飛び散り、重力で垂れながら 2.2 秒で消える
+function burst(p) {
+  const N = 140, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), vel = [];
+  const c = new THREE.Color(LIGHT_COLORS[Math.floor(Math.random() * LIGHT_COLORS.length)]);
+  for (let i = 0; i < N; i++) {
+    pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
+    const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1), sp = 7 + Math.random() * 3;
+    vel.push(Math.sin(ph) * Math.cos(th) * sp, Math.cos(ph) * sp, Math.sin(ph) * Math.sin(th) * sp);
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const m = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.5, vertexColors: true, transparent: true, opacity: 1, fog: false, depthWrite: false }));
+  W.scene.add(m);
+  FX.bursts.push({ m, vel, t: 0 });
+  sndBoom();
+}
+
+function updateBursts(dt) {
+  FX.clock += dt;
+  while (FX.pending.length && FX.pending[0].at <= FX.clock) burst(FX.pending.shift());
+  for (let i = FX.bursts.length - 1; i >= 0; i--) {
+    const b = FX.bursts[i];
+    b.t += dt;
+    const a = b.m.geometry.attributes.position, arr = a.array;
+    for (let j = 0; j < b.vel.length; j += 3) {
+      b.vel[j + 1] -= 6 * dt;
+      arr[j] += b.vel[j] * dt; arr[j + 1] += b.vel[j + 1] * dt; arr[j + 2] += b.vel[j + 2] * dt;
+    }
+    a.needsUpdate = true;
+    b.m.material.opacity = Math.max(0, 1 - b.t / 2.2);
+    if (b.t > 2.2) {
+      W.scene.remove(b.m);
+      b.m.geometry.dispose();
+      b.m.material.dispose();
+      FX.bursts.splice(i, 1);
+    }
+  }
 }

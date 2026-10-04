@@ -180,3 +180,19 @@ function sndScurry() {
   const t = c.currentTime;
   for (let i = 0; i < 8; i++) sndTone(i % 2 ? 660 : 520, t + i * 0.07, 0.06, 'square', 0.06);
 }
+
+// 花火「ドーン」（低い音とノイズ）
+function sndBoom() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  sndTone(90, t, 0.5, 'sine', 0.35, 40);
+  const src = c.createBufferSource(); src.buffer = SND.noise;
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1200;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.3, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+  src.connect(lp); lp.connect(g); g.connect(SND.out);
+  src.start(t, Math.random() * 1.2, 0.65);
+}
