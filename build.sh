@@ -11,6 +11,7 @@ cat src/00-head.html \
     src/20-sound.js \
     src/30-world.js \
     src/40-santa.js \
+    src/42-delivery-fx.js \
     src/45-camera.js \
     src/50-input.js \
     src/60-hud.js \
