@@ -15,6 +15,7 @@
   const santa = newSanta(START.x, START.z);
   const sm = makeSantaMesh();
   const mk = makeMarker();
+  const run = newRun();
   initInput(renderer.domElement);
 
   addEventListener('resize', () => {
@@ -31,6 +32,7 @@
     started = true;
     title.classList.add('off');
     sndInit();
+    setObjective('そりでプレゼントを受け取ろう');
     const cv = renderer.domElement;
     if (!INPUT.touch) lockPointer(cv);
   });
@@ -44,8 +46,10 @@
       const l = takeLook();
       camLook(l.x, l.y);
       const bx = santa.pos.x, bz = santa.pos.z;
-      const mv = readMove();
-      mv.jump = takeJump();
+      const playing = run.state === 'play';
+      const mv = playing ? readMove() : { x: 0, z: 0 };
+      mv.jump = takeJump() && playing;
+      const act = takeAct();
       santaStep(santa, mv, CAM.yaw, dt, PHYS.boxes);
       if (santa.jumped) { santa.jumped = false; sndJump(); }
       if (santa.landSpeed > 0) {
@@ -61,13 +65,32 @@
         walked += Math.hypot(santa.pos.x - bx, santa.pos.z - bz);
         if (walked > 1.1) { walked = 0; sndStep(); }
       }
-      // 川に落ちたらスタートへ戻す（Phase 3 で「プレゼントを落とす → 受け取り地点からやり直し」にする）
-      if (santa.pos.y < CFG.fallY) {
-        santa.pos = { x: START.x, y: 0, z: START.z };
-        santa.vel = { x: 0, y: 0, z: 0 };
+      // プレゼント：受け取る・落とす・やり直し・向こう岸（向こう岸は Phase 4 で配達に置き換える）
+      if (act && tryPickup(run, santa, COURSE.sleigh)) {
+        sndPickup();
+        showToast('プレゼントを受け取った！', 1.6);
+        setObjective('プレゼントを持って、川の向こう岸へ');
       }
+      const ev = stepRun(run, santa, dt, COURSE.respawn);
+      if (ev === 'dropped') {
+        throwPresent(sm);
+        sndDrop();
+        showToast('プレゼントを落とした！', CFG.dropDelay);
+      } else if (ev === 'respawn') {
+        clearThrown(sm);
+        showToast('そりからやり直し', 1.4);
+      }
+      if (checkCrossed(run, santa)) {
+        showToast('向こう岸に着いた！', 2.2);
+        setObjective('向こう岸に着いた！（配達は次の段階で作ります）');
+      }
+      const canPick = !run.carrying && run.state === 'play' && nearPickup(santa, COURSE.sleigh);
+      setPrompt(canPick ? (INPUT.touch ? '「受け取る」ボタンで受け取る' : 'E で受け取る') : null);
+      sm.carrying = run.carrying;
     }
     updateSantaMesh(sm, santa, dt, t);
+    updateThrown(sm, dt);
+    updateHud(dt);
     updateMarker(mk, santa, t);
     updateCamera(santa, dt);
     updateSnow(santa.pos, dt, t);
@@ -77,5 +100,5 @@
   requestAnimationFrame(frame);
 
   // 画面確認用（コンソールから位置やカメラを動かせる）
-  window.GAME = { santa, CAM, PHYS, W, renderer, camera };
+  window.GAME = { santa, run, sm, CAM, PHYS, W, renderer, camera };
 })();

@@ -78,3 +78,33 @@ function sndLand(power) {
   src.connect(lp); lp.connect(g2); g2.connect(SND.out);
   src.start(t, Math.random() * 1.5, 0.18);
 }
+
+// 単音。freqEnd を渡すとその音程まで滑る
+function sndTone(freq, t0, dur, type, vol, freqEnd) {
+  const c = SND.ctx;
+  const o = c.createOscillator(); o.type = type || 'sine';
+  o.frequency.setValueAtTime(freq, t0);
+  if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, t0 + dur);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(SND.out);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+
+// 受け取り「ピロリン」
+function sndPickup() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  sndTone(988, t, 0.15, 'sine', 0.2);
+  sndTone(1319, t + 0.1, 0.25, 'sine', 0.2);
+}
+
+// 落とした「ヒュ〜〜」（音程が下がる）
+function sndDrop() {
+  const c = SND.ctx;
+  if (!c) return;
+  sndTone(700, c.currentTime, 0.7, 'triangle', 0.22, 110);
+}

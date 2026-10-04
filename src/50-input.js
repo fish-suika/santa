@@ -1,11 +1,12 @@
 // ===== 入力（キーボード・マウス・タッチ） =====
-const INPUT = { keys: {}, lookX: 0, lookY: 0, stick: null, lookTouch: null, touch: false, jump: false };
+const INPUT = { keys: {}, lookX: 0, lookY: 0, stick: null, lookTouch: null, touch: false, jump: false, act: false };
 const STICK_R = 50;   // スティックを倒しきる距離 px
 
 function initInput(canvas) {
   addEventListener('keydown', e => {
     INPUT.keys[e.code] = true;
     if (e.code === 'Space' && !e.repeat) INPUT.jump = true;
+    if (e.code === 'KeyE' && !e.repeat) INPUT.act = true;
     if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   });
   addEventListener('keyup', e => { INPUT.keys[e.code] = false; });
@@ -69,6 +70,8 @@ function initInput(canvas) {
   // スマホのジャンプボタン（canvas の外なので、視点ドラッグとは別に押せる）
   const jb = document.getElementById('jumpBtn');
   jb.addEventListener('touchstart', e => { e.preventDefault(); INPUT.jump = true; }, { passive: false });
+  const ab = document.getElementById('actBtn');
+  ab.addEventListener('touchstart', e => { e.preventDefault(); INPUT.act = true; }, { passive: false });
 }
 
 // 移動入力 {x: 右が+, z: 前が+}
@@ -92,6 +95,13 @@ function takeJump() {
   const j = INPUT.jump;
   INPUT.jump = false;
   return j;
+}
+
+// E（受け取る・届ける）が押されたか（押された瞬間に 1 回だけ true）
+function takeAct() {
+  const a = INPUT.act;
+  INPUT.act = false;
+  return a;
 }
 
 // マウスを画面に固定する。環境によって断られ、そのとき Promise が reject されるので握りつぶす
