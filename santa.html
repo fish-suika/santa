@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>サンタ、ちゃんと届けて</title>
+<style>
+  :root{
+    --ink:#fff8ee;
+    --red:#e0413a;
+    --gold:#ffd27a;
+    --jp:"Hiragino Kaku Gothic ProN","Yu Gothic","YuGothic","Meiryo","Noto Sans JP",sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0b1430;color:var(--ink);font-family:var(--jp);
+    touch-action:none;user-select:none;-webkit-user-select:none}
+  canvas{display:block;width:100%;height:100%}
+
+  /* ---- タイトル ---- */
+  #title{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:18px;padding:16px;text-align:center;cursor:pointer;background:rgba(8,14,36,.55)}
+  #title h1{font-size:clamp(28px,6vw,56px);letter-spacing:.08em;text-shadow:0 2px 18px rgba(0,0,0,.6)}
+  #title h1 span{color:var(--red)}
+  #title p{font-size:clamp(14px,2.4vw,18px);color:var(--gold);letter-spacing:.2em}
+  #title small{font-size:13px;opacity:.75;line-height:1.8}
+  #title.off{display:none}
+
+  /* ---- 操作のヒント（PC のみ） ---- */
+  #hint{position:fixed;left:16px;bottom:16px;z-index:5;font-size:13px;opacity:.7;pointer-events:none;text-shadow:0 1px 6px #000}
+  body.touch #hint{display:none}
+
+  /* ---- スマホの移動スティック（触れた場所に出る） ---- */
+  #stick{position:fixed;z-index:6;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08);display:none;pointer-events:none}
+  #stick.on{display:block}
+  #knob{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;background:rgba(255,255,255,.45)}
+</style>
+</head>
+<body>
+<div id="title">
+  <h1>サンタ、<span>ちゃんと</span>届けて</h1>
+  <p>クリック / タップで はじめる</p>
+  <small>WASD 移動 ・ マウス 視点<br>スマホ：左で移動 ・ 右で視点</small>
+</div>
+<div id="hint">WASD 移動 ／ マウス 視点 ／ Esc でマウスを離す</div>
+<div id="stick"><div id="knob"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+// ===== 数値はすべてここ。遊んでもらいながら調整する =====
+const CFG = {
+  // サンタの体（位置は足元の中心。単位はメートル）
+  santaHalf: 0.4,       // 横幅の半分
+  santaHeight: 1.7,
+
+  // 歩き
+  walkSpeed: 6,         // 最高速度 m/s
+  groundAccel: 40,      // 最高速度へ近づく速さ m/s²（止まるときも同じ）
+  stepHeight: 0.35,     // これ以下の段差は歩いて上がれる
+
+  // 落下
+  gravity: 30,          // m/s²
+  maxFall: 60,          // 落下速度の上限 m/s
+
+  // カメラ（サンタの後ろ）
+  camDist: 7,
+  camLookHeight: 1.4,   // 足元からどれだけ上を見るか
+  camPitch: 0.35,       // 最初の見下ろし角（ラジアン）
+  camPitchMin: -0.15,
+  camPitchMax: 1.2,
+  camMinDist: 1.2,      // 壁に寄ったときの最短距離
+  mouseSens: 0.0025,    // マウス 1px あたりの回転（ラジアン）
+  touchSens: 0.006,     // タッチ 1px あたりの回転（ラジアン）
+};
+// ===== 当たり判定（three.js に依存しない。verify から直接試す） =====
+// 箱は {minX,maxX,minY,maxY,minZ,maxZ}。街の当たり判定はすべてこの箱で表す。
+const PHYS = { boxes: [] };
+const EPS = 0.001;
+
+// 中心 (cx, cz)、下端 y0、幅 w・高さ h・奥行 d の箱
+function makeBox(cx, y0, cz, w, h, d) {
+  return { minX: cx - w / 2, maxX: cx + w / 2, minY: y0, maxY: y0 + h, minZ: cz - d / 2, maxZ: cz + d / 2 };
+}
+function addBox(cx, y0, cz, w, h, d) {
+  const b = makeBox(cx, y0, cz, w, h, d);
+  PHYS.boxes.push(b);
+  return b;
+}
+function removeBox(b) {
+  const i = PHYS.boxes.indexOf(b);
+  if (i >= 0) PHYS.boxes.splice(i, 1);
+}
+
+// 面が接しているだけなら重なりに数えない
+function overlaps(a, b) {
+  return a.minX < b.maxX && a.maxX > b.minX &&
+         a.minY < b.maxY && a.maxY > b.minY &&
+         a.minZ < b.maxZ && a.maxZ > b.minZ;
+}
+// 足元の位置 p にいるときの体の箱
+function bodyBox(p) {
+  const r = CFG.santaHalf;
+  return { minX: p.x - r, maxX: p.x + r, minY: p.y, maxY: p.y + CFG.santaHeight, minZ: p.z - r, maxZ: p.z + r };
+}
+function hitAll(p, boxes) {
+  const me = bodyBox(p);
+  return boxes.filter(b => overlaps(me, b));
+}
+function hitAny(p, boxes) {
+  const me = bodyBox(p);
+  for (const b of boxes) if (overlaps(me, b)) return b;
+  return null;
+}
+
+// 体 {pos, vel, onGround} を dt 秒動かす。重力・壁・段差・着地・天井を処理する。
+// 速いときに薄い箱をすり抜けないよう、1回の移動が 0.2m 以下になるよう刻む。
+function moveBody(body, dt, boxes) {
+  const v = body.vel;
+  v.y = Math.max(v.y - CFG.gravity * dt, -CFG.maxFall);
+  const far = Math.max(Math.abs(v.x), Math.abs(v.y), Math.abs(v.z)) * dt;
+  const n = Math.max(1, Math.ceil(far / 0.2));
+  const h = dt / n;
+  for (let i = 0; i < n; i++) {
+    moveAxisH(body, 'x', v.x * h, boxes);
+    moveAxisH(body, 'z', v.z * h, boxes);
+    moveAxisY(body, v.y * h, boxes);
+  }
+  // 足元のすぐ下に箱があれば接地
+  body.onGround = v.y <= 0 && !!hitAny({ x: body.pos.x, y: body.pos.y - 0.02, z: body.pos.z }, boxes);
+}
+
+// 横（x か z）に d だけ動かす。低い段差なら上に乗り、それ以外は壁の手前で止める。
+function moveAxisH(body, ax, d, boxes) {
+  if (d === 0) return;
+  const p = body.pos;
+  p[ax] += d;
+  const hits = hitAll(p, boxes);
+  if (!hits.length) return;
+  const top = Math.max(...hits.map(b => b.maxY));
+  if (body.onGround && top - p.y <= CFG.stepHeight) {
+    const up = { x: p.x, y: top + EPS, z: p.z };
+    if (!hitAny(up, boxes)) { p.y = up.y; return; }
+  }
+  const r = CFG.santaHalf, A = ax.toUpperCase();
+  p[ax] = d > 0 ? Math.min(...hits.map(b => b['min' + A])) - r - EPS
+                : Math.max(...hits.map(b => b['max' + A])) + r + EPS;
+  body.vel[ax] = 0;
+}
+
+// 縦に d だけ動かす。下向きなら一番高い面に乗り、上向きなら頭を一番低い面で止める。
+function moveAxisY(body, d, boxes) {
+  if (d === 0) return;
+  const p = body.pos;
+  p.y += d;
+  const hits = hitAll(p, boxes);
+  if (!hits.length) return;
+  p.y = d < 0 ? Math.max(...hits.map(b => b.maxY))
+              : Math.min(...hits.map(b => b.minY)) - CFG.santaHeight - EPS;
+  body.vel.y = 0;
+}
+
+// 原点 o から方向 dir（長さ1）へ飛ばした線が箱に当たる距離。当たらなければ Infinity。
+// o が箱の中なら 0。
+function rayBox(o, dir, b) {
+  let tmin = 0, tmax = Infinity;
+  for (const ax of ['x', 'y', 'z']) {
+    const A = ax.toUpperCase(), lo = b['min' + A], hi = b['max' + A];
+    if (Math.abs(dir[ax]) < 1e-9) {
+      if (o[ax] < lo || o[ax] > hi) return Infinity;
+      continue;
+    }
+    let t1 = (lo - o[ax]) / dir[ax], t2 = (hi - o[ax]) / dir[ax];
+    if (t1 > t2) { const s = t1; t1 = t2; t2 = s; }
+    tmin = Math.max(tmin, t1);
+    tmax = Math.min(tmax, t2);
+    if (tmin > tmax) return Infinity;
+  }
+  return tmin;
+}
+// ===== サンタとカメラの操作（three.js に依存しない） =====
+</script>
+</body>
+</html>

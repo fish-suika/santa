@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>検証 — サンタ、ちゃんと届けて</title>
+<style>
+  body{font-family:"Yu Gothic UI",system-ui,sans-serif;background:#1c1c1e;color:#eee;padding:24px;line-height:1.7}
+  h1{font-size:18px;margin-bottom:16px}
+  .r{padding:4px 0;border-bottom:1px solid #333}
+  .ok::before{content:"PASS ";color:#6bd07a;font-weight:bold}
+  .ng::before{content:"FAIL ";color:#ff6b6b;font-weight:bold}
+  .ng{color:#ffb0b0}
+  .why{color:#ff8f8f;padding-left:3em;font-size:13px}
+  #sum{margin-top:18px;font-size:16px;font-weight:bold}
+</style>
+</head>
+<body>
+<h1>サンタ、ちゃんと届けて — 検証</h1>
+<div id="out"></div>
+<div id="sum"></div>
+
+<script>
+"use strict";
+// ===== 数値はすべてここ。遊んでもらいながら調整する =====
+const CFG = {
+  // サンタの体（位置は足元の中心。単位はメートル）
+  santaHalf: 0.4,       // 横幅の半分
+  santaHeight: 1.7,
+
+  // 歩き
+  walkSpeed: 6,         // 最高速度 m/s
+  groundAccel: 40,      // 最高速度へ近づく速さ m/s²（止まるときも同じ）
+  stepHeight: 0.35,     // これ以下の段差は歩いて上がれる
+
+  // 落下
+  gravity: 30,          // m/s²
+  maxFall: 60,          // 落下速度の上限 m/s
+
+  // カメラ（サンタの後ろ）
+  camDist: 7,
+  camLookHeight: 1.4,   // 足元からどれだけ上を見るか
+  camPitch: 0.35,       // 最初の見下ろし角（ラジアン）
+  camPitchMin: -0.15,
+  camPitchMax: 1.2,
+  camMinDist: 1.2,      // 壁に寄ったときの最短距離
+  mouseSens: 0.0025,    // マウス 1px あたりの回転（ラジアン）
+  touchSens: 0.006,     // タッチ 1px あたりの回転（ラジアン）
+};
+// ===== 当たり判定（three.js に依存しない。verify から直接試す） =====
+// 箱は {minX,maxX,minY,maxY,minZ,maxZ}。街の当たり判定はすべてこの箱で表す。
+const PHYS = { boxes: [] };
+const EPS = 0.001;
+
+// 中心 (cx, cz)、下端 y0、幅 w・高さ h・奥行 d の箱
+function makeBox(cx, y0, cz, w, h, d) {
+  return { minX: cx - w / 2, maxX: cx + w / 2, minY: y0, maxY: y0 + h, minZ: cz - d / 2, maxZ: cz + d / 2 };
+}
+function addBox(cx, y0, cz, w, h, d) {
+  const b = makeBox(cx, y0, cz, w, h, d);
+  PHYS.boxes.push(b);
+  return b;
+}
+function removeBox(b) {
+  const i = PHYS.boxes.indexOf(b);
+  if (i >= 0) PHYS.boxes.splice(i, 1);
+}
+
+// 面が接しているだけなら重なりに数えない
+function overlaps(a, b) {
+  return a.minX < b.maxX && a.maxX > b.minX &&
+         a.minY < b.maxY && a.maxY > b.minY &&
+         a.minZ < b.maxZ && a.maxZ > b.minZ;
+}
+// 足元の位置 p にいるときの体の箱
+function bodyBox(p) {
+  const r = CFG.santaHalf;
+  return { minX: p.x - r, maxX: p.x + r, minY: p.y, maxY: p.y + CFG.santaHeight, minZ: p.z - r, maxZ: p.z + r };
+}
+function hitAll(p, boxes) {
+  const me = bodyBox(p);
+  return boxes.filter(b => overlaps(me, b));
+}
+function hitAny(p, boxes) {
+  const me = bodyBox(p);
+  for (const b of boxes) if (overlaps(me, b)) return b;
+  return null;
+}
+
+// 体 {pos, vel, onGround} を dt 秒動かす。重力・壁・段差・着地・天井を処理する。
+// 速いときに薄い箱をすり抜けないよう、1回の移動が 0.2m 以下になるよう刻む。
+function moveBody(body, dt, boxes) {
+  const v = body.vel;
+  v.y = Math.max(v.y - CFG.gravity * dt, -CFG.maxFall);
+  const far = Math.max(Math.abs(v.x), Math.abs(v.y), Math.abs(v.z)) * dt;
+  const n = Math.max(1, Math.ceil(far / 0.2));
+  const h = dt / n;
+  for (let i = 0; i < n; i++) {
+    moveAxisH(body, 'x', v.x * h, boxes);
+    moveAxisH(body, 'z', v.z * h, boxes);
+    moveAxisY(body, v.y * h, boxes);
+  }
+  // 足元のすぐ下に箱があれば接地
+  body.onGround = v.y <= 0 && !!hitAny({ x: body.pos.x, y: body.pos.y - 0.02, z: body.pos.z }, boxes);
+}
+
+// 横（x か z）に d だけ動かす。低い段差なら上に乗り、それ以外は壁の手前で止める。
+function moveAxisH(body, ax, d, boxes) {
+  if (d === 0) return;
+  const p = body.pos;
+  p[ax] += d;
+  const hits = hitAll(p, boxes);
+  if (!hits.length) return;
+  const top = Math.max(...hits.map(b => b.maxY));
+  if (body.onGround && top - p.y <= CFG.stepHeight) {
+    const up = { x: p.x, y: top + EPS, z: p.z };
+    if (!hitAny(up, boxes)) { p.y = up.y; return; }
+  }
+  const r = CFG.santaHalf, A = ax.toUpperCase();
+  p[ax] = d > 0 ? Math.min(...hits.map(b => b['min' + A])) - r - EPS
+                : Math.max(...hits.map(b => b['max' + A])) + r + EPS;
+  body.vel[ax] = 0;
+}
+
+// 縦に d だけ動かす。下向きなら一番高い面に乗り、上向きなら頭を一番低い面で止める。
+function moveAxisY(body, d, boxes) {
+  if (d === 0) return;
+  const p = body.pos;
+  p.y += d;
+  const hits = hitAll(p, boxes);
+  if (!hits.length) return;
+  p.y = d < 0 ? Math.max(...hits.map(b => b.maxY))
+              : Math.min(...hits.map(b => b.minY)) - CFG.santaHeight - EPS;
+  body.vel.y = 0;
+}
+
+// 原点 o から方向 dir（長さ1）へ飛ばした線が箱に当たる距離。当たらなければ Infinity。
+// o が箱の中なら 0。
+function rayBox(o, dir, b) {
+  let tmin = 0, tmax = Infinity;
+  for (const ax of ['x', 'y', 'z']) {
+    const A = ax.toUpperCase(), lo = b['min' + A], hi = b['max' + A];
+    if (Math.abs(dir[ax]) < 1e-9) {
+      if (o[ax] < lo || o[ax] > hi) return Infinity;
+      continue;
+    }
+    let t1 = (lo - o[ax]) / dir[ax], t2 = (hi - o[ax]) / dir[ax];
+    if (t1 > t2) { const s = t1; t1 = t2; t2 = s; }
+    tmin = Math.max(tmin, t1);
+    tmax = Math.min(tmax, t2);
+    if (tmin > tmax) return Infinity;
+  }
+  return tmin;
+}
+// ===== サンタとカメラの操作（three.js に依存しない） =====
+// ===== 検証ハーネス =====
+const __results = [];
+function test(name, fn) {
+  try { fn(); __results.push({ name, ok: true }); }
+  catch (e) { __results.push({ name, ok: false, why: e.message }); }
+}
+function eq(actual, expected, label) {
+  const a = JSON.stringify(actual), b = JSON.stringify(expected);
+  if (a !== b) throw new Error((label ? label + ': ' : '') + 'expected ' + b + ' but got ' + a);
+}
+function near(actual, expected, tol, label) {
+  if (!(Math.abs(actual - expected) <= tol)) throw new Error((label ? label + ': ' : '') + 'expected ' + expected + ' ±' + tol + ' but got ' + actual);
+}
+const ground = () => makeBox(0, -1, 0, 100, 1, 100);   // 上面が y=0 の地面
+
+// ===== 当たり判定 =====
+test('makeBox: 中心・下端・寸法から箱を作る', () => {
+  eq(makeBox(1, 2, 3, 4, 5, 6), { minX: -1, maxX: 3, minY: 2, maxY: 7, minZ: 0, maxZ: 6 });
+});
+
+test('addBox / removeBox: PHYS.boxes に出し入れできる', () => {
+  const n = PHYS.boxes.length;
+  const b = addBox(0, 0, 0, 1, 1, 1);
+  eq(PHYS.boxes.length, n + 1);
+  removeBox(b);
+  eq(PHYS.boxes.length, n);
+});
+
+test('overlaps: 面が接しているだけなら重ならない', () => {
+  eq(overlaps(makeBox(0, 0, 0, 2, 2, 2), makeBox(2, 0, 0, 2, 2, 2)), false);
+  eq(overlaps(makeBox(0, 0, 0, 2, 2, 2), makeBox(1.9, 0, 0, 2, 2, 2)), true);
+});
+
+test('moveBody: 地面に立っていると沈まず、接地している', () => {
+  const b = { pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 0, z: 0 }, onGround: false };
+  for (let i = 0; i < 120; i++) moveBody(b, 1 / 60, [ground()]);
+  near(b.pos.y, 0, 0.001);
+  eq(b.onGround, true);
+});
+
+test('moveBody: 高いところから落ちると箱の上に着地する', () => {
+  const b = { pos: { x: 0, y: 8, z: 0 }, vel: { x: 0, y: 0, z: 0 }, onGround: false };
+  for (let i = 0; i < 120; i++) moveBody(b, 1 / 60, [ground(), makeBox(0, 0, 0, 4, 2, 4)]);
+  near(b.pos.y, 2, 0.001);
+  eq(b.onGround, true);
+});
+
+test('moveBody: 足場がなければ落ち続ける', () => {
+  const b = { pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 0, z: 0 }, onGround: false };
+  for (let i = 0; i < 60; i++) moveBody(b, 1 / 60, []);
+  eq(b.pos.y < -10, true, '落ちている');
+  eq(b.onGround, false);
+});
+
+test('moveBody: 速く落ちても薄い板（0.1m）をすり抜けない', () => {
+  const b = { pos: { x: 0, y: 40, z: 0 }, vel: { x: 0, y: -CFG.maxFall, z: 0 }, onGround: false };
+  for (let i = 0; i < 60; i++) moveBody(b, 1 / 30, [ground(), makeBox(0, 10, 0, 4, 0.1, 4)]);
+  near(b.pos.y, 10.1, 0.001);
+});
+
+test('moveBody: 上昇中に天井にぶつかると頭で止まる', () => {
+  const b = { pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 15, z: 0 }, onGround: true };
+  let top = 0;
+  for (let i = 0; i < 30; i++) { moveBody(b, 1 / 60, [ground(), makeBox(0, 3, 0, 4, 1, 4)]); top = Math.max(top, b.pos.y); }
+  eq(top <= 3 - CFG.santaHeight, true, '頭が天井（y=3）を越えない。最高点 ' + top);
+});
+
+test('moveBody: 横に動いて壁に当たると、壁の手前で止まる', () => {
+  const b = { pos: { x: 0, y: 0, z: 0 }, vel: { x: 6, y: 0, z: 0 }, onGround: true };
+  for (let i = 0; i < 60; i++) { b.vel.x = 6; moveBody(b, 1 / 60, [ground(), makeBox(4, 0, 0, 2, 3, 10)]); }
+  near(b.pos.x, 3 - CFG.santaHalf, 0.01);
+  eq(b.vel.x, 0);
+});
+
+test('moveBody: 低い段差（0.15m）は上がる', () => {
+  const b = { pos: { x: 0, y: 0, z: 0 }, vel: { x: 6, y: 0, z: 0 }, onGround: true };
+  for (let i = 0; i < 60; i++) { b.vel.x = 6; moveBody(b, 1 / 60, [ground(), makeBox(13, 0, 0, 20, 0.15, 10)]); }
+  near(b.pos.y, 0.15, 0.01);
+  eq(b.pos.x > 4, true, '段差の上を進んでいる');
+});
+
+test('moveBody: 高い段差（0.5m）は上がれない', () => {
+  const b = { pos: { x: 0, y: 0, z: 0 }, vel: { x: 6, y: 0, z: 0 }, onGround: true };
+  for (let i = 0; i < 60; i++) { b.vel.x = 6; moveBody(b, 1 / 60, [ground(), makeBox(13, 0, 0, 20, 0.5, 10)]); }
+  near(b.pos.x, 3 - CFG.santaHalf, 0.01);
+  near(b.pos.y, 0, 0.001);
+});
+
+test('rayBox: 正面の箱までの距離。外れたら Infinity', () => {
+  near(rayBox({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, makeBox(5, -1, 0, 2, 2, 2)), 4, 1e-9);
+  eq(rayBox({ x: 0, y: 0, z: 0 }, { x: -1, y: 0, z: 0 }, makeBox(5, -1, 0, 2, 2, 2)), Infinity);
+  eq(rayBox({ x: 0, y: 5, z: 0 }, { x: 1, y: 0, z: 0 }, makeBox(5, -1, 0, 2, 2, 2)), Infinity);
+});
+
+// ===== 結果表示 =====
+(function () {
+  const out = document.getElementById('out');
+  let pass = 0;
+  for (const r of __results) {
+    const d = document.createElement('div');
+    d.className = 'r ' + (r.ok ? 'ok' : 'ng');
+    d.textContent = r.name;
+    out.appendChild(d);
+    if (r.ok) pass++;
+    else { const w = document.createElement('div'); w.className = 'why'; w.textContent = r.why; out.appendChild(w); }
+  }
+  const sum = pass + '/' + __results.length;
+  document.getElementById('sum').textContent = (pass === __results.length ? 'すべて通過 ' : '失敗あり ') + sum;
+  document.title = (pass === __results.length ? 'PASS ' : 'FAIL ') + sum;
+})();
+</script>
+</body>
+</html>
