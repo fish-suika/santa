@@ -220,6 +220,46 @@ function cameraPlace(target, yaw, pitch, boxes) {
   dist = Math.max(CFG.camMinDist, dist);
   return { x: target.x + dir.x * dist, y: target.y + dir.y * dist, z: target.z + dir.z * dist, dist, dir };
 }
+// ===== 音（Web Audio で自作。ファイルは使わない） =====
+const SND = { ctx: null, out: null, noise: null };
+
+// 最初のクリック・タップで呼ぶ（ブラウザは操作前に音を出させない）
+function sndInit() {
+  if (SND.ctx) return;
+  try { SND.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+  const c = SND.ctx;
+  SND.out = c.createGain();
+  SND.out.gain.value = 0.7;
+  SND.out.connect(c.destination);
+  const buf = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  SND.noise = buf;
+
+  // 風：ノイズを低くこもらせ、ゆっくり強弱をつけて流し続ける
+  const src = c.createBufferSource(); src.buffer = buf; src.loop = true;
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380;
+  const g = c.createGain(); g.gain.value = 0.06;
+  const lfo = c.createOscillator(); lfo.frequency.value = 0.08;
+  const lg = c.createGain(); lg.gain.value = 0.04;
+  lfo.connect(lg); lg.connect(g.gain);
+  src.connect(lp); lp.connect(g); g.connect(SND.out);
+  src.start(); lfo.start();
+}
+
+// 雪を踏む「ザクッ」
+function sndStep() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  const src = c.createBufferSource(); src.buffer = SND.noise;
+  const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1100 + Math.random() * 700; bp.Q.value = 1.1;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.35, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+  src.connect(bp); bp.connect(g); g.connect(SND.out);
+  src.start(t, Math.random() * 1.5, 0.14);
+}
 // ===== 街（見た目と当たり判定を一緒に作る） =====
 const W = { scene: null, houses: [], snow: null };
 
@@ -427,6 +467,232 @@ function updateSnow(center, dt, t) {
   }
   a.needsUpdate = true;
 }
+// ===== サンタの見た目（正面は -Z） =====
+function makeSantaMesh() {
+  const g = new THREE.Group();
+  const red = mat(0xd8322c), white = mat(0xf4f1ea), black = mat(0x1b1b1f), skin = mat(0xf2c7a5);
+  const add = (geo, m, x, y, z, parent) => {
+    const o = new THREE.Mesh(geo, m);
+    o.position.set(x, y, z);
+    (parent || g).add(o);
+    return o;
+  };
+  // 脚と腕は付け根を中心に振るので Group に入れる
+  const leg = x => {
+    const p = new THREE.Group(); p.position.set(x, 0.6, 0); g.add(p);
+    add(new THREE.BoxGeometry(0.26, 0.5, 0.28), red, 0, -0.25, 0, p);
+    add(new THREE.BoxGeometry(0.3, 0.14, 0.4), black, 0, -0.53, -0.05, p);
+    return p;
+  };
+  const arm = x => {
+    const p = new THREE.Group(); p.position.set(x, 1.25, 0); g.add(p);
+    add(new THREE.BoxGeometry(0.2, 0.55, 0.22), red, 0, -0.27, 0, p);
+    add(new THREE.SphereGeometry(0.12, 10, 8), white, 0, -0.58, 0, p);
+    return p;
+  };
+  const legL = leg(-0.17), legR = leg(0.17), armL = arm(-0.5), armR = arm(0.5);
+  add(new THREE.BoxGeometry(0.8, 0.75, 0.6), red, 0, 0.95, 0);                     // 胴
+  add(new THREE.BoxGeometry(0.82, 0.12, 0.62), black, 0, 0.78, 0);                 // ベルト
+  add(new THREE.BoxGeometry(0.16, 0.1, 0.04), mat(0xffd84d), 0, 0.78, -0.33);      // バックル
+  add(new THREE.BoxGeometry(0.14, 0.62, 0.04), white, 0, 1.02, -0.31);             // 前の白い線
+  add(new THREE.SphereGeometry(0.24, 16, 12), skin, 0, 1.5, 0);                    // 顔
+  add(new THREE.SphereGeometry(0.2, 12, 10), white, 0, 1.38, -0.12);               // ひげ
+  add(new THREE.SphereGeometry(0.03, 6, 6), black, -0.08, 1.56, -0.22);            // 目
+  add(new THREE.SphereGeometry(0.03, 6, 6), black, 0.08, 1.56, -0.22);
+  add(new THREE.CylinderGeometry(0.27, 0.27, 0.08, 16), white, 0, 1.62, 0);        // 帽子のふち
+  add(new THREE.ConeGeometry(0.25, 0.45, 14), red, 0, 1.88, 0.02);                 // 帽子
+  add(new THREE.SphereGeometry(0.08, 10, 8), white, 0, 2.12, 0.03);                // ぼんぼり
+  add(new THREE.SphereGeometry(0.38, 14, 10), mat(0x9a6a3a), 0, 1.1, 0.42);        // 背中の袋
+  W.scene.add(g);
+  return { group: g, legL, legR, armL, armR, rot: 0 };
+}
+
+// 角度 a を b へ、最短の回り方で f の割合だけ近づける
+function lerpAngle(a, b, f) {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return a + d * f;
+}
+
+function updateSantaMesh(sm, s, dt, t) {
+  sm.group.position.set(s.pos.x, s.pos.y, s.pos.z);
+  sm.rot = lerpAngle(sm.rot, s.facing, Math.min(1, dt * 14));
+  sm.group.rotation.y = sm.rot;
+  const sp = Math.min(1, Math.hypot(s.vel.x, s.vel.z) / CFG.walkSpeed);
+  const sw = s.onGround ? Math.sin(t * 11) * 0.7 * sp : 0;
+  sm.legL.rotation.x = sw;  sm.legR.rotation.x = -sw;
+  sm.armL.rotation.x = -sw * 0.8; sm.armR.rotation.x = sw * 0.8;
+}
+// ===== 三人称カメラ =====
+const CAM = { yaw: 0, pitch: CFG.camPitch, dist: CFG.camDist, cam: null };
+
+// マウス・タッチの動き（ラジアン）。右へ動かすと右を向き、下へ動かすと見下ろす。
+function camLook(dx, dy) {
+  CAM.yaw -= dx;
+  CAM.pitch = Math.min(CFG.camPitchMax, Math.max(CFG.camPitchMin, CAM.pitch + dy));
+}
+
+function updateCamera(s, dt) {
+  const target = { x: s.pos.x, y: s.pos.y + CFG.camLookHeight, z: s.pos.z };
+  const p = cameraPlace(target, CAM.yaw, CAM.pitch, PHYS.boxes);
+  // 壁に寄るときはすぐ、離れるときはゆっくり戻す（カメラがガクガクしないように）
+  CAM.dist = p.dist < CAM.dist ? p.dist : CAM.dist + (p.dist - CAM.dist) * Math.min(1, dt * 5);
+  const d = p.dir;
+  CAM.cam.position.set(target.x + d.x * CAM.dist, target.y + d.y * CAM.dist, target.z + d.z * CAM.dist);
+  CAM.cam.lookAt(target.x, target.y, target.z);
+}
+// ===== 入力（キーボード・マウス・タッチ） =====
+const INPUT = { keys: {}, lookX: 0, lookY: 0, stick: null, lookTouch: null, touch: false };
+const STICK_R = 50;   // スティックを倒しきる距離 px
+
+function initInput(canvas) {
+  addEventListener('keydown', e => {
+    INPUT.keys[e.code] = true;
+    if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
+  });
+  addEventListener('keyup', e => { INPUT.keys[e.code] = false; });
+  addEventListener('blur', () => { INPUT.keys = {}; });
+
+  addEventListener('mousemove', e => {
+    if (document.pointerLockElement !== canvas) return;
+    INPUT.lookX += e.movementX * CFG.mouseSens;
+    INPUT.lookY += e.movementY * CFG.mouseSens;
+  });
+  canvas.addEventListener('click', () => {
+    if (!INPUT.touch && canvas.requestPointerLock && document.pointerLockElement !== canvas) canvas.requestPointerLock();
+  });
+
+  // タッチ：画面の左半分は移動スティック（触れた場所に出る）、右半分はドラッグで視点
+  const stickEl = document.getElementById('stick'), knob = document.getElementById('knob');
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    INPUT.touch = true;
+    document.body.classList.add('touch');
+    for (const t of e.changedTouches) {
+      if (t.clientX < innerWidth / 2 && !INPUT.stick) {
+        INPUT.stick = { id: t.identifier, ox: t.clientX, oy: t.clientY, x: 0, z: 0 };
+        stickEl.style.left = t.clientX + 'px';
+        stickEl.style.top = t.clientY + 'px';
+        knob.style.transform = '';
+        stickEl.classList.add('on');
+      } else if (!INPUT.lookTouch) {
+        INPUT.lookTouch = { id: t.identifier, x: t.clientX, y: t.clientY };
+      }
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      const s = INPUT.stick, l = INPUT.lookTouch;
+      if (s && t.identifier === s.id) {
+        let dx = t.clientX - s.ox, dy = t.clientY - s.oy;
+        const len = Math.hypot(dx, dy);
+        if (len > STICK_R) { dx *= STICK_R / len; dy *= STICK_R / len; }
+        s.x = dx / STICK_R;
+        s.z = -dy / STICK_R;
+        knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      } else if (l && t.identifier === l.id) {
+        INPUT.lookX += (t.clientX - l.x) * CFG.touchSens;
+        INPUT.lookY += (t.clientY - l.y) * CFG.touchSens;
+        l.x = t.clientX;
+        l.y = t.clientY;
+      }
+    }
+  }, { passive: false });
+  const end = e => {
+    for (const t of e.changedTouches) {
+      if (INPUT.stick && t.identifier === INPUT.stick.id) { INPUT.stick = null; stickEl.classList.remove('on'); }
+      if (INPUT.lookTouch && t.identifier === INPUT.lookTouch.id) INPUT.lookTouch = null;
+    }
+  };
+  canvas.addEventListener('touchend', end);
+  canvas.addEventListener('touchcancel', end);
+}
+
+// 移動入力 {x: 右が+, z: 前が+}
+function readMove() {
+  if (INPUT.stick) return { x: INPUT.stick.x, z: INPUT.stick.z };
+  const k = INPUT.keys;
+  const x = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
+  const z = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
+  return { x, z };
+}
+// たまった視点の動きを受け取って空にする
+function takeLook() {
+  const l = { x: INPUT.lookX, y: INPUT.lookY };
+  INPUT.lookX = 0;
+  INPUT.lookY = 0;
+  return l;
+}
+// ===== 起動とメインループ =====
+(function boot() {
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.prepend(renderer.domElement);
+
+  W.scene = new THREE.Scene();
+  buildWorld();
+  makeSnow();
+  const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 400);
+  CAM.cam = camera;
+
+  const START = { x: 0, z: 14 };
+  const santa = newSanta(START.x, START.z);
+  const sm = makeSantaMesh();
+  initInput(renderer.domElement);
+
+  addEventListener('resize', () => {
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  });
+
+  // タイトル：クリック・タップで始める
+  let started = false;
+  const title = document.getElementById('title');
+  title.addEventListener('touchstart', () => { INPUT.touch = true; document.body.classList.add('touch'); }, { passive: true });
+  title.addEventListener('click', () => {
+    started = true;
+    title.classList.add('off');
+    sndInit();
+    const cv = renderer.domElement;
+    if (!INPUT.touch && cv.requestPointerLock) cv.requestPointerLock();
+  });
+
+  let last = performance.now(), t = 0, walked = 0;
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    t += dt;
+    if (started) {
+      const l = takeLook();
+      camLook(l.x, l.y);
+      const bx = santa.pos.x, bz = santa.pos.z;
+      santaStep(santa, readMove(), CAM.yaw, dt, PHYS.boxes);
+      // 雪を踏む音（地面を 1.1m 進むごと）
+      if (santa.onGround) {
+        walked += Math.hypot(santa.pos.x - bx, santa.pos.z - bz);
+        if (walked > 1.1) { walked = 0; sndStep(); }
+      }
+      // 万一、街の外へ落ちたらスタートへ戻す
+      if (santa.pos.y < -30) {
+        santa.pos = { x: START.x, y: 0, z: START.z };
+        santa.vel = { x: 0, y: 0, z: 0 };
+      }
+    }
+    updateSantaMesh(sm, santa, dt, t);
+    updateCamera(santa, dt);
+    updateSnow(santa.pos, dt, t);
+    renderer.render(W.scene, camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // 画面確認用（コンソールから位置やカメラを動かせる）
+  window.GAME = { santa, CAM, PHYS, W, renderer, camera };
+})();
 </script>
 </body>
 </html>
