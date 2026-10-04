@@ -144,6 +144,30 @@ function building(cx, cz, w, d, h, color) {
   }
 }
 
+// そり（プレゼントの受け取り地点）。当たり判定なし（中に入って受け取れる）
+function sleigh(x, z) {
+  const red = mat(0xc0392b), gold = mat(0xffd84d, 0x5a4000);
+  deco(new THREE.BoxGeometry(1.6, 0.7, 2.8), red, x, 0.75, z);              // 車体
+  deco(new THREE.BoxGeometry(1.6, 0.9, 0.3), red, x, 1.25, z + 1.3);        // 背もたれ
+  for (const sx of [-0.7, 0.7]) {
+    deco(new THREE.BoxGeometry(0.12, 0.12, 3.4), gold, x + sx, 0.12, z - 0.1);   // 刃
+    for (const sz of [-1, 1]) deco(new THREE.BoxGeometry(0.1, 0.35, 0.1), gold, x + sx, 0.3, z + sz);   // 脚
+  }
+  // 積まれたプレゼント
+  const cols = [0x2f9e57, 0x3a7bd5, 0xffd84d, 0xd8322c, 0x9b59b6];
+  for (let i = 0; i < 5; i++) {
+    deco(new THREE.BoxGeometry(0.5, 0.5, 0.5), mat(cols[i]),
+      x + (i % 2 ? 0.35 : -0.35), 1.35 + Math.floor(i / 2) * 0.45, z - 0.6 + (i % 3) * 0.4);
+  }
+  // 足元の光の輪（受け取れる範囲の目安）とやわらかい明かり
+  const ring = deco(new THREE.RingGeometry(2.0, 2.3, 40),
+    new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.6 }), x, 0.03, z);
+  ring.rotation.x = -Math.PI / 2;
+  const L = new THREE.PointLight(0xffd27a, 1.0, 10, 2);
+  L.position.set(x, 2.5, z);
+  W.scene.add(L);
+}
+
 function buildWorld() {
   const s = W.scene;
   s.background = new THREE.Color(0x0b1430);
@@ -187,6 +211,7 @@ function buildWorld() {
   }
 
   // ---- 手前の岸 ----
+  sleigh(COURSE.sleigh.x, COURSE.sleigh.z);
   // 28m のマンション（川の縁に建つ）。屋上から跳べば余裕で川を越える（約 2.5m の余り）。
   // 地面からは届かないので、家の屋根（約 7.5m）→ 17m の建物 → 屋上と段を登る
   building(15, 13, 12, 12, 28, 0x7d8aa3);

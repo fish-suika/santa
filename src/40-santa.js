@@ -34,8 +34,12 @@ function makeSantaMesh() {
   add(new THREE.ConeGeometry(0.25, 0.45, 14), red, 0, 1.88, 0.02);                 // 帽子
   add(new THREE.SphereGeometry(0.08, 10, 8), white, 0, 2.12, 0.03);                // ぼんぼり
   add(new THREE.SphereGeometry(0.38, 14, 10), mat(0x9a6a3a), 0, 1.1, 0.42);        // 背中の袋
+  const present = makePresentMesh();     // 胸の前に抱えるプレゼント（持っているときだけ見える）
+  present.position.set(0, 1.0, -0.55);
+  present.visible = false;
+  g.add(present);
   W.scene.add(g);
-  return { group: g, legL, legR, armL, armR, rot: 0, squash: 0 };
+  return { group: g, legL, legR, armL, armR, rot: 0, squash: 0, present, carrying: false, thrown: null };
 }
 
 // 角度 a を b へ、最短の回り方で f の割合だけ近づける
@@ -60,9 +64,51 @@ function updateSantaMesh(sm, s, dt, t) {
     sm.armL.rotation.x = sm.armR.rotation.x = 2.6;
     sm.legL.rotation.x = 0.4; sm.legR.rotation.x = -0.4;
   }
+  // プレゼントを持っているときは、両腕を前に出して抱える
+  if (sm.carrying) sm.armL.rotation.x = sm.armR.rotation.x = 1.25;
+  sm.present.visible = sm.carrying;
   // 着地でつぶれて、すぐ戻る
   sm.squash = Math.max(0, sm.squash - dt * 2.5);
   sm.group.scale.set(1 + sm.squash * 0.5, 1 - sm.squash, 1 + sm.squash * 0.5);
+}
+
+// プレゼント（緑の箱に金のリボン）
+function makePresentMesh() {
+  const g = new THREE.Group(), s = 0.55, gold = mat(0xffd84d, 0x6a4a00);
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(s, s, s), mat(0x2f9e57)));
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(s + 0.02, s + 0.02, 0.1), gold));
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, s + 0.02, s + 0.02), gold));
+  const bow = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.035, 6, 12), gold);
+  bow.position.y = s / 2 + 0.06;
+  g.add(bow);
+  return g;
+}
+
+// 落としたプレゼントを宙に放り出す（見た目だけ。当たり判定なし。川の氷の下へ消える）
+function throwPresent(sm) {
+  clearThrown(sm);
+  const wp = new THREE.Vector3();
+  sm.present.getWorldPosition(wp);
+  const m = makePresentMesh();
+  m.position.copy(wp);
+  W.scene.add(m);
+  sm.thrown = { mesh: m, vx: (Math.random() - 0.5) * 3, vy: 7, vz: (Math.random() - 0.5) * 3 };
+}
+function updateThrown(sm, dt) {
+  const th = sm.thrown;
+  if (!th) return;
+  th.vy -= CFG.gravity * dt;
+  th.mesh.position.x += th.vx * dt;
+  th.mesh.position.y += th.vy * dt;
+  th.mesh.position.z += th.vz * dt;
+  th.mesh.rotation.x += 6 * dt;
+  th.mesh.rotation.z += 4 * dt;
+  if (th.mesh.position.y < -30) clearThrown(sm);
+}
+function clearThrown(sm) {
+  if (!sm.thrown) return;
+  W.scene.remove(sm.thrown.mesh);
+  sm.thrown = null;
 }
 
 // 真下の影（いつも）と、着地点の目印の輪（空中だけ。建物越しでも見える）
