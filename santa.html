@@ -1023,9 +1023,9 @@ function lerp(a, b, k) { return a + (b - a) * k; }
 
 // 光の柱。配達先の煙突から空へ伸びる。サンタの足元が beaconMinY より高いときだけ見える
 function makeBeacon() {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 120, 16, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0, depthWrite: false, fog: false,
-      side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 120, 16, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffb020, transparent: true, opacity: 0, depthWrite: false, fog: false,
+      side: THREE.DoubleSide }));   // 加算合成だと雪の白の上で白くなって見えないので、ふつうの合成で濃い金色
   m.visible = false;
   W.scene.add(m);
   return { mesh: m, alpha: 0 };
@@ -1038,7 +1038,7 @@ function updateBeacon(b, ch, s, dt, t) {
   b.mesh.visible = !!ch && b.alpha > 0.01;
   if (!ch) return;
   b.mesh.position.set(ch.x, ch.y + 60, ch.z);
-  b.mesh.material.opacity = b.alpha * (0.45 + Math.sin(t * 3) * 0.1);
+  b.mesh.material.opacity = b.alpha * (0.75 + Math.sin(t * 3) * 0.12);
 }
 
 // 届けたプレゼントが、サンタの頭の上から弧を描いて煙突の真上へ移り、煙突の中へ沈む
