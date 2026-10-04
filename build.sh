@@ -8,8 +8,10 @@ cat src/00-head.html \
     src/12-physics.js \
     src/14-control.js \
     src/16-run.js \
+    src/18-hazards.js \
     src/20-sound.js \
     src/30-world.js \
+    src/34-hazards-view.js \
     src/40-santa.js \
     src/42-delivery-fx.js \
     src/45-camera.js \
@@ -26,6 +28,7 @@ cat src/verify-head.html \
     src/12-physics.js \
     src/14-control.js \
     src/16-run.js \
+    src/18-hazards.js \
     src/verify-tests.js \
     src/99-tail.html > verify.html
 

@@ -529,6 +529,74 @@ test('線路: 止まっている列車の屋根を中継すれば渡れる', () 
   eq(tryRail(true), true);
 });
 
+// ===== 電線 =====
+const WIRE = { ax: 'x', c: 0, a0: -5, a1: 5, y: 9 };
+function airAt(x, y, z, vx, vz) {
+  const s = newSanta(x, z);
+  s.pos.y = y; s.vel = { x: vx || 0, y: 0, z: vz || 0 }; s.onGround = false;
+  return s;
+}
+
+test('wireHit: 空中で、体が電線の高さにあると当たる', () => {
+  eq(wireHit(airAt(0, 8, 0), WIRE), true);
+});
+
+test('wireHit: 電線より上・下の線より下・端より外・横にずれていると当たらない', () => {
+  eq(wireHit(airAt(0, 9.2, 0), WIRE), false, '足元が上の線より上');
+  eq(wireHit(airAt(0, 6, 0), WIRE), false, '頭が下の線（8.6）より下');
+  eq(wireHit(airAt(6, 8, 0), WIRE), false, '端より外');
+  eq(wireHit(airAt(0, 8, 1), WIRE), false, '横に 1m');
+});
+
+test('checkWires: 引っかかると、前へ進む勢いが逆向きに 1/4 になり、下へ落ち始める', () => {
+  const s = airAt(0, 8, 0.3, 0, -6);
+  eq(checkWires(s, [WIRE], 1 / 60), true);
+  near(s.vel.z, 1.5, 1e-9);
+  eq(s.vel.y, -3);
+});
+
+test('checkWires: 地上では引っかからない。引っかかっている間は二度当たらない', () => {
+  const g = airAt(0, 8, 0); g.onGround = true;
+  eq(checkWires(g, [WIRE], 1 / 60), false);
+  const s = airAt(0, 8, 0);
+  checkWires(s, [WIRE], 1 / 60);
+  eq(checkWires(s, [WIRE], 1 / 60), false);
+});
+
+// ===== 走る車 =====
+test('moveCar: z0〜z1 を行き来し、端で折り返す。当たり判定の箱もいっしょに動く', () => {
+  const c = newCar(0, 0, -10, 5);
+  for (let i = 0; i < 150; i++) moveCar(c, 1 / 60);   // 2.5 秒で 12.5m → -10 で折り返して -7.5
+  near(c.z, -7.5, 1e-6);
+  eq(c.dir, 1);
+  near(c.boxes[0].minZ, -7.5 - 2.1, 1e-6);
+});
+
+test('updateCar: 車の前に立っていると、はねられて車の進む向きへ飛ばされる', () => {
+  const c = newCar(0, 3, -20, 7);
+  const s = newSanta(0, 0); s.onGround = true;
+  let res = null;
+  for (let i = 0; i < 60 && res !== 'hit'; i++) res = updateCar(c, s, 1 / 60);
+  eq(res, 'hit');
+  eq(s.vel.y > 0, true);
+  eq(s.vel.z < 0, true, '車の進む向き（-Z）へ');
+  eq(s.onGround, false);
+});
+
+test('updateCar: 屋根の上に立っていると、いっしょに動く', () => {
+  const c = newCar(0, 0, -20, 6);
+  const s = newSanta(0, 0); s.pos.y = c.boxes[1].maxY; s.onGround = true;
+  eq(updateCar(c, s, 0.5), 'ride');
+  near(s.pos.z, -3, 1e-9);
+  near(c.z, -3, 1e-9);
+});
+
+test('updateCar: 離れていれば何も起きない', () => {
+  const c = newCar(0, 0, -20, 6);
+  const s = newSanta(5, 0); s.onGround = true;
+  eq(updateCar(c, s, 1 / 60), null);
+});
+
 // ===== 結果表示 =====
 (function () {
   const out = document.getElementById('out');
