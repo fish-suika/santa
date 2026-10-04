@@ -13,7 +13,9 @@ function buildWires() {
       g.add(m);
     }
     W.scene.add(g);
-    for (const a of [w.a0, w.a1]) {
+    const nSeg = Math.max(1, Math.ceil(len / 20));   // 電柱は両端と、間に 20m 以下おき
+    for (let i = 0; i <= nSeg; i++) {
+      const a = w.a0 + (w.a1 - w.a0) * i / nSeg;
       const px = w.ax === 'x' ? a : w.c, pz = w.ax === 'x' ? w.c : a;
       solid(px, 0, pz, 0.3, w.y + 0.4, 0.3, mat(0x5a4a3a));   // 電柱（歩道の上、電線の真下）
       deco(new THREE.BoxGeometry(w.ax === 'x' ? 0.15 : 1.6, 0.15, w.ax === 'x' ? 1.6 : 0.15), mat(0x5a4a3a), px, w.y, pz);   // 腕木

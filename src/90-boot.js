@@ -114,7 +114,8 @@
           showToast('トンネルにぶつかった！', 1.2);
         }
       }
-      const ra = HZ.runaway, raRes = stepRunaway(ra, santa, dt, run.state === 'play' && run.target === ra.target);
+      // 届けるまでは、配達の順番に関係なく近づけば逃げる
+      const ra = HZ.runaway, raRes = stepRunaway(ra, santa, dt, run.state === 'play' && run.target <= ra.target);
       if (raRes === 'flee' && !ra.noticed) {
         ra.noticed = true;
         sndScurry();

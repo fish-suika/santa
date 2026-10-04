@@ -723,12 +723,13 @@ test('逃げる家: 空中のサンタからは逃げない', () => {
   eq(h.x, 0);
 });
 
-test('逃げる家: 屋根に乗るとつかまえて、それ以上逃げない', () => {
+test('逃げる家: 屋根に乗っている間は止まり、降りるとまた逃げる', () => {
   const h = runawayFor(), s = newSanta(0, 0);
   s.pos.y = 5.5; s.onGround = true;
   eq(stepRunaway(h, s, 1 / 60, true), 'caught');
-  eq(stepRunaway(h, groundAt(-6, 0), 0.5, true), null);
+  eq(stepRunaway(h, s, 1 / 60, true), null, '乗っている間');
   eq(h.x, 0);
+  eq(stepRunaway(h, groundAt(-6, 0), 0.5, true), 'flee', '降りた');
 });
 
 test('逃げる家: 配達先でなければ（active でない）逃げない。resetRunaway で元の場所へ', () => {

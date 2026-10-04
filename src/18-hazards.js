@@ -146,12 +146,18 @@ function moveRunaway(h, mx, mz) {
   h.chimney.front.z += mz;
 }
 
-// 家を逃がす。active（その家がいまの配達先）で、地上のサンタが fleeRange 以内なら、離れる向きに fleeSpeed で逃げる。
-// 空中のサンタからは逃げない（上は見ていない）。屋根に乗られたら caught。返り値: 'flee'／'caught'（つかまった瞬間）／null
+// 家を逃がす。active（まだ届けていない）で、地上のサンタが fleeRange 以内なら、離れる向きに fleeSpeed で逃げる。
+// 空中のサンタからは逃げない（上は見ていない）。屋根に乗られている間は止まり、降りるとまた逃げる。
+// 返り値: 'flee'／'caught'（屋根に乗られた瞬間）／null
 function stepRunaway(h, s, dt, active) {
   h.fleeing = false;
-  if (h.caught || !active) return null;
-  if (standingOn(s, h.boxes)) { h.caught = true; return 'caught'; }
+  if (!active) return null;
+  if (standingOn(s, h.boxes)) {
+    const first = !h.caught;
+    h.caught = true;
+    return first ? 'caught' : null;
+  }
+  h.caught = false;
   if (!s.onGround) return null;
   const dx = h.x - s.pos.x, dz = h.z - s.pos.z, d = Math.hypot(dx, dz);
   if (d > CFG.fleeRange || d < 1e-6) return null;

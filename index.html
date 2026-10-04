@@ -180,11 +180,12 @@ const COURSE = {
   targets: [                             // 配達先の家（中心）。この順に届ける
     { x: -17, z: 30 }, { x: -20, z: -30 }, { x: -24, z: -88 }, { x: -20, z: -130 }, { x: 0, z: -232 },
   ],
-  wires: [   // 電線の束（3 本）。ax 方向に a0〜a1、もう一方の座標 c を中心に横 ±0.6m、高さ y。両側の歩道の真上（x = ±9）
-              // 当たるとプレゼントを落とす。歩道や車道の端で跳ぶと当たる。車道の真ん中寄りから跳べば当たらない
-    { ax: 'z', c: 9, a0: 21, a1: 40, y: 11 },  { ax: 'z', c: -9, a0: 21, a1: 40, y: 11 },     // 1 住宅街
-    { ax: 'z', c: 9, a0: -10, a1: -42, y: 11 }, { ax: 'z', c: -9, a0: -10, a1: -42, y: 11 },  // 2 商店街
-    { ax: 'z', c: 9, a0: -120, a1: -138, y: 11 }, { ax: 'z', c: -9, a0: -120, a1: -138, y: 11 },  // 4 高架下
+  wires: [   // 電線の束（3 本）。ax 方向に a0〜a1、もう一方の座標 c を中心に横 ±0.6m、高さ y。両側の歩道の真上（x = ±9）に、道路が続くところ全体へ
+              // 当たるとプレゼントを落とす。歩道や車道の端で跳ぶと当たる。車道の真ん中寄りから跳べば当たらない。電柱は 20m おき
+    { ax: 'z', c: 9, a0: 20, a1: 61, y: 11 },  { ax: 'z', c: -9, a0: 16, a1: 61, y: 11 },        // 1 住宅街（川の縁の建物の脇から）
+    { ax: 'z', c: 9, a0: -8, a1: -46, y: 11 }, { ax: 'z', c: -9, a0: -8, a1: -46, y: 11 },       // 2 商店街
+    { ax: 'z', c: 9, a0: -118, a1: -140, y: 11 }, { ax: 'z', c: 9, a0: -151, a1: -159, y: 11 },  // 4 高架下・東（9m の建物から高架へ跳ぶ所は途切れる）
+    { ax: 'z', c: -9, a0: -118, a1: -159, y: 11 },                                               // 4 高架下・西
   ],
   cars: [    // 走る車。x は固定。at から走り出し、まず z1 の向きへ進み、z0〜z1 を行き来する。車線は x = -5.5, -2, 2, 5.5（1 車線に 1 台）
     { x: -5.5, z0: 58, z1: 12, at: 58, speed: 12, color: 0xf1c40f },      // 1 住宅街
@@ -655,12 +656,18 @@ function moveRunaway(h, mx, mz) {
   h.chimney.front.z += mz;
 }
 
-// 家を逃がす。active（その家がいまの配達先）で、地上のサンタが fleeRange 以内なら、離れる向きに fleeSpeed で逃げる。
-// 空中のサンタからは逃げない（上は見ていない）。屋根に乗られたら caught。返り値: 'flee'／'caught'（つかまった瞬間）／null
+// 家を逃がす。active（まだ届けていない）で、地上のサンタが fleeRange 以内なら、離れる向きに fleeSpeed で逃げる。
+// 空中のサンタからは逃げない（上は見ていない）。屋根に乗られている間は止まり、降りるとまた逃げる。
+// 返り値: 'flee'／'caught'（屋根に乗られた瞬間）／null
 function stepRunaway(h, s, dt, active) {
   h.fleeing = false;
-  if (h.caught || !active) return null;
-  if (standingOn(s, h.boxes)) { h.caught = true; return 'caught'; }
+  if (!active) return null;
+  if (standingOn(s, h.boxes)) {
+    const first = !h.caught;
+    h.caught = true;
+    return first ? 'caught' : null;
+  }
+  h.caught = false;
   if (!s.onGround) return null;
   const dx = h.x - s.pos.x, dz = h.z - s.pos.z, d = Math.hypot(dx, dz);
   if (d > CFG.fleeRange || d < 1e-6) return null;
@@ -1273,7 +1280,9 @@ function buildWires() {
       g.add(m);
     }
     W.scene.add(g);
-    for (const a of [w.a0, w.a1]) {
+    const nSeg = Math.max(1, Math.ceil(len / 20));   // 電柱は両端と、間に 20m 以下おき
+    for (let i = 0; i <= nSeg; i++) {
+      const a = w.a0 + (w.a1 - w.a0) * i / nSeg;
       const px = w.ax === 'x' ? a : w.c, pz = w.ax === 'x' ? w.c : a;
       solid(px, 0, pz, 0.3, w.y + 0.4, 0.3, mat(0x5a4a3a));   // 電柱（歩道の上、電線の真下）
       deco(new THREE.BoxGeometry(w.ax === 'x' ? 0.15 : 1.6, 0.15, w.ax === 'x' ? 1.6 : 0.15), mat(0x5a4a3a), px, w.y, pz);   // 腕木
@@ -1903,7 +1912,8 @@ function saveBest(v) {
           showToast('トンネルにぶつかった！', 1.2);
         }
       }
-      const ra = HZ.runaway, raRes = stepRunaway(ra, santa, dt, run.state === 'play' && run.target === ra.target);
+      // 届けるまでは、配達の順番に関係なく近づけば逃げる
+      const ra = HZ.runaway, raRes = stepRunaway(ra, santa, dt, run.state === 'play' && run.target <= ra.target);
       if (raRes === 'flee' && !ra.noticed) {
         ra.noticed = true;
         sndScurry();
