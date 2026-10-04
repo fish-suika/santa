@@ -10,7 +10,7 @@ function camLook(dx, dy) {
 function updateCamera(s, dt) {
   // 空中では注視点を下げ、カメラを後ろへ引いて、サンタと真下の着地点が両方画面に入るようにする
   const gy = groundBelow(s.pos, PHYS.boxes);
-  const h = s.onGround || !isFinite(gy) ? 0 : Math.max(0, s.pos.y - gy);
+  const h = s.onGround || !isFinite(gy) ? 0 : Math.min(CFG.camAirMaxH, Math.max(0, s.pos.y - gy));
   const wantY = s.pos.y + CFG.camLookHeight - h * CFG.camAirDrop;
   const wantP = Math.min(1, h / CFG.jumpHeight) * CFG.camAirPitch;
   const f = Math.min(1, dt * 6);

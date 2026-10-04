@@ -91,6 +91,7 @@ const CFG = {
   camAirDrop: 0.5,      // 地面からの高さのこの割合だけ、注視点を下げる
   camAirPitch: 0.15,    // 最高点で見下ろし角にこれだけ足す（ラジアン。高さに比例）
   camAirBack: 0.6,      // 地面からの高さ 1m につき、カメラをこれだけ後ろへ引く（サンタと着地点を両方画面に入れる）
+  camAirMaxH: 20,       // カメラの引き・注視点の下げは、この高さまでで頭打ち（高い屋上から川へ跳んだとき引きすぎない）
 };
 
 // ===== 試しコースの寸法 =====
@@ -544,6 +545,7 @@ function buildWorld() {
   solid(0, -4, -(R + 80) / 2, 160, 4, 80 - R, mat(COL.snow));   // 向こう岸 z = -80〜-R
   const ice = deco(new THREE.PlaneGeometry(160, R * 2), mat(0x9fc6e8, 0x1a2a40), 0, -2.5, 0);
   ice.rotation.x = -Math.PI / 2;
+  addBox(0, -6, 0, 160, 3.5, R * 2);   // 川底（氷の面）。ここに着く前に fallY でやり直しになるが、空中の目印とカメラが川の上でも働くように置く
   const bank1 = deco(new THREE.PlaneGeometry(160, 4), mat(0x55586a), 0, -2, R - 0.01);    // 手前の岸の石垣（川側を向く）
   bank1.rotation.y = Math.PI;
   deco(new THREE.PlaneGeometry(160, 4), mat(0x55586a), 0, -2, -R + 0.01);                  // 向こう岸の石垣
@@ -563,9 +565,11 @@ function buildWorld() {
   }
 
   // ---- 手前の岸 ----
-  // 19m のマンション（川の縁に建つ）。地面からは届かないので、隣の家の屋根から登る
-  building(15, 13, 12, 12, 19, 0x7d8aa3);
-  house(16, 27, 9, 8, 6.5, 0x9fb7c9);           // マンションへの足がかり（屋根から跳べば屋上に届く）
+  // 28m のマンション（川の縁に建つ）。屋上から跳べば余裕で川を越える（約 2.5m の余り）。
+  // 地面からは届かないので、家の屋根（約 7.5m）→ 17m の建物 → 屋上と段を登る
+  building(15, 13, 12, 12, 28, 0x7d8aa3);
+  building(28, 21, 8, 12, 17, 0x8a7f96);          // 中段。家の屋根から真東へ跳べば届き、ここから真西へ跳べばマンションの屋上に届く
+  house(16, 27, 9, 8, 6.5, 0x9fb7c9);           // 最初の足がかり（屋根から 17m の建物に届く）
   // 11m の建物（川の縁）。ここから跳んでもぎりぎり届く
   building(-14, 11, 10, 8, 11, 0xa08f7d);
   house(-17, 30, 9, 8, 4.5, 0xc9b79c);
@@ -732,7 +736,7 @@ function camLook(dx, dy) {
 function updateCamera(s, dt) {
   // 空中では注視点を下げ、カメラを後ろへ引いて、サンタと真下の着地点が両方画面に入るようにする
   const gy = groundBelow(s.pos, PHYS.boxes);
-  const h = s.onGround || !isFinite(gy) ? 0 : Math.max(0, s.pos.y - gy);
+  const h = s.onGround || !isFinite(gy) ? 0 : Math.min(CFG.camAirMaxH, Math.max(0, s.pos.y - gy));
   const wantY = s.pos.y + CFG.camLookHeight - h * CFG.camAirDrop;
   const wantP = Math.min(1, h / CFG.jumpHeight) * CFG.camAirPitch;
   const f = Math.min(1, dt * 6);
