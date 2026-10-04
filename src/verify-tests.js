@@ -92,6 +92,86 @@ test('rayBox: 正面の箱までの距離。外れたら Infinity', () => {
   eq(rayBox({ x: 0, y: 5, z: 0 }, { x: 1, y: 0, z: 0 }, makeBox(5, -1, 0, 2, 2, 2)), Infinity);
 });
 
+// ===== 操作 =====
+const STOP = { x: 0, z: 0 }, FWD = { x: 0, z: 1 };
+const EAST = -Math.PI / 2;   // この向きで前に歩くと +X へ進む
+function walk(s, input, yaw, sec, boxes) {
+  for (let i = 0; i < sec * 60; i++) santaStep(s, input, yaw, 1 / 60, boxes);
+}
+
+test('santaStep: yaw=0 で前に歩くと -Z へ進み、速さは walkSpeed に達する', () => {
+  const s = newSanta(0, 0);
+  walk(s, FWD, 0, 1, [ground()]);
+  near(s.vel.z, -CFG.walkSpeed, 0.01);
+  near(s.vel.x, 0, 0.001);
+  eq(s.pos.z < -4, true);
+});
+
+test('santaStep: yaw=-π/2 で前に歩くと +X へ進む', () => {
+  const s = newSanta(0, 0);
+  walk(s, FWD, EAST, 1, [ground()]);
+  near(s.vel.x, CFG.walkSpeed, 0.01);
+  near(s.vel.z, 0, 0.01);
+});
+
+test('santaStep: 右入力は yaw=0 で +X', () => {
+  const s = newSanta(0, 0);
+  walk(s, { x: 1, z: 0 }, 0, 1, [ground()]);
+  near(s.vel.x, CFG.walkSpeed, 0.01);
+});
+
+test('santaStep: 斜め入力でも walkSpeed を超えない', () => {
+  const s = newSanta(0, 0);
+  walk(s, { x: 1, z: 1 }, 0, 1, [ground()]);
+  near(Math.hypot(s.vel.x, s.vel.z), CFG.walkSpeed, 0.01);
+});
+
+test('santaStep: 入力をやめると止まる', () => {
+  const s = newSanta(0, 0);
+  walk(s, FWD, 0, 1, [ground()]);
+  walk(s, STOP, 0, 1, [ground()]);
+  eq(Math.hypot(s.vel.x, s.vel.z) < 0.001, true);
+});
+
+test('santaStep: 歩いた向きを facing に覚える（-Z へ歩けば 0、+X へ歩けば -π/2）', () => {
+  const s = newSanta(0, 0);
+  walk(s, FWD, 0, 0.5, [ground()]);
+  near(s.facing, 0, 1e-6);
+  walk(s, FWD, EAST, 0.5, [ground()]);
+  near(s.facing, -Math.PI / 2, 1e-6);
+});
+
+test('santaStep: 縁石を歩いて上がり、壁では止まる', () => {
+  const s = newSanta(0, 0);
+  // 縁石は x=3〜9、壁は x=8〜10（壁の手前まで縁石が続く）
+  walk(s, FWD, EAST, 3, [ground(), makeBox(6, 0, 0, 6, 0.15, 10), makeBox(9, 0, 0, 2, 3, 10)]);
+  near(s.pos.y, 0.15, 0.01, '縁石の上');
+  near(s.pos.x, 8 - CFG.santaHalf, 0.01, '壁の手前');
+});
+
+test('cameraPlace: 遮るものがなければ camDist 離れた後ろ（yaw=0 なら +Z 側）', () => {
+  const p = cameraPlace({ x: 0, y: 1.4, z: 0 }, 0, 0, []);
+  near(p.dist, CFG.camDist, 1e-9);
+  near(p.z, CFG.camDist, 1e-9);
+  near(p.x, 0, 1e-9);
+});
+
+test('cameraPlace: 後ろに壁があれば、壁の 0.3m 手前に寄る', () => {
+  const p = cameraPlace({ x: 0, y: 1.4, z: 0 }, 0, 0, [makeBox(0, 0, 4.5, 10, 5, 1)]);
+  near(p.dist, 4 - 0.3, 1e-6);
+});
+
+test('cameraPlace: noCam の箱（街の端の見えない壁）は無視する', () => {
+  const b = makeBox(0, 0, 4.5, 10, 5, 1); b.noCam = true;
+  const p = cameraPlace({ x: 0, y: 1.4, z: 0 }, 0, 0, [b]);
+  near(p.dist, CFG.camDist, 1e-9);
+});
+
+test('cameraPlace: 壁が近すぎても camMinDist より寄らない', () => {
+  const p = cameraPlace({ x: 0, y: 1.4, z: 0 }, 0, 0, [makeBox(0, 0, 0.8, 10, 5, 0.2)]);
+  near(p.dist, CFG.camMinDist, 1e-9);
+});
+
 // ===== 結果表示 =====
 (function () {
   const out = document.getElementById('out');
