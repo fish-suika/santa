@@ -53,12 +53,12 @@ function updateFx(dt) {
   if (k2 >= 1) { W.scene.remove(d.mesh); FX.down = null; }
 }
 
-// クリアの花火。center のまわり（横 ±8m・高さ +0〜8m）に、0.45 秒おきに 5 発
+// クリアの花火。center のまわり（横 ±8m・高さ +0〜5m）に、0.45 秒おきに 5 発
 function celebrate(center) {
   FX.clock = 0;
   FX.pending = [];
   for (let k = 0; k < 5; k++) {
-    FX.pending.push({ at: k * 0.45, x: center.x + (Math.random() - 0.5) * 16, y: center.y + Math.random() * 8, z: center.z + (Math.random() - 0.5) * 16 });
+    FX.pending.push({ at: k * 0.45, x: center.x + (Math.random() - 0.5) * 16, y: center.y + Math.random() * 5, z: center.z + (Math.random() - 0.5) * 16 });
   }
 }
 

@@ -34,9 +34,9 @@
 
   function finish() {
     sndClear();
-    // カメラの前方 14m・サンタの 9m 上のあたりに花火
+    // カメラの前方 14m・サンタの 3m 上のあたりに花火（高すぎると画角の上にはみ出す）
     const a = camAxes(CAM.yaw);
-    celebrate({ x: santa.pos.x + a.fx * 14, y: santa.pos.y + 9, z: santa.pos.z + a.fz * 14 });
+    celebrate({ x: santa.pos.x + a.fx * 14, y: santa.pos.y + 3, z: santa.pos.z + a.fz * 14 });
     const r = bestAfter(best, run.time);
     best = r.best;
     if (r.isNew) saveBest(best);
