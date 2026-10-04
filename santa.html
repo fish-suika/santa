@@ -642,10 +642,12 @@ function addLights(pts, cols) {
   W.scene.add(new THREE.Points(g, LIGHT_MAT));
 }
 
-// 家。棟（屋根のてっぺん）は X 方向に通る。
+// 家。棟（屋根のてっぺん）は X 方向に通る。y0 は土台の高さ（崖の上の家など。省略で 0）。
 // 屋根の見た目は三角、当たり判定は 8 段の階段（乗った足と斜面のずれは 0.15m 以内、1段は stepHeight 以下）。
-function house(cx, cz, w, d, wallH, wallColor) {
-  solid(cx, 0, cz, w, wallH, d, mat(wallColor));
+function house(cx, cz, w, d, wallH, wallColor, y0) {
+  y0 = y0 || 0;
+  const top = y0 + wallH;   // 軒の高さ
+  solid(cx, y0, cz, w, wallH, d, mat(wallColor));
 
   const over = 0.4, hd = d / 2 + over, len = w + over * 2;
   const roofH = Math.min(2.4, d * 0.35);
@@ -653,35 +655,35 @@ function house(cx, cz, w, d, wallH, wallColor) {
   shape.moveTo(-hd, 0); shape.lineTo(hd, 0); shape.lineTo(0, roofH); shape.closePath();
   const g = new THREE.ExtrudeGeometry(shape, { depth: len, bevelEnabled: false });
   g.translate(0, 0, -len / 2);
-  const roof = deco(g, mat(COL.roof), cx, wallH, cz);
+  const roof = deco(g, mat(COL.roof), cx, top, cz);
   roof.rotation.y = Math.PI / 2;
-  for (const b of roofSteps(cx, wallH, cz, len, roofH, hd)) PHYS.boxes.push(b);
+  for (const b of roofSteps(cx, top, cz, len, roofH, hd)) PHYS.boxes.push(b);
 
   // 煙突（配達先になる）
   const chH = roofH + 1.0, chX = cx + w * 0.25, chZ = cz + d * 0.18;
-  solid(chX, wallH, chZ, 0.9, chH, 0.9, mat(COL.brick));
-  solid(chX, wallH + chH, chZ, 1.1, 0.2, 1.1, mat(COL.brickTop));
+  solid(chX, top, chZ, 0.9, chH, 0.9, mat(COL.brick));
+  solid(chX, top + chH, chZ, 1.1, 0.2, 1.1, mat(COL.brickTop));
 
   // 窓（明かりがついている）とドア
   const floors = wallH >= 5.5 ? [1.5, 4.2] : [1.6];
   for (const fy of floors) for (const fx of [-w * 0.25, w * 0.25]) for (const side of [1, -1]) {
-    const win = deco(new THREE.PlaneGeometry(1.1, 1.2), mat(0x000000, COL.glass), cx + fx, fy, cz + side * (d / 2 + 0.02));
+    const win = deco(new THREE.PlaneGeometry(1.1, 1.2), mat(0x000000, COL.glass), cx + fx, y0 + fy, cz + side * (d / 2 + 0.02));
     if (side < 0) win.rotation.y = Math.PI;
   }
-  deco(new THREE.PlaneGeometry(1.1, 2.0), mat(COL.door), cx, 1.0, cz + d / 2 + 0.03);
+  deco(new THREE.PlaneGeometry(1.1, 2.0), mat(COL.door), cx, y0 + 1.0, cz + d / 2 + 0.03);
 
   // 軒先のイルミネーション
   const pts = [], cols = [], c = new THREE.Color();
   let k = 0;
   for (const side of [1, -1]) for (let x = -len / 2; x <= len / 2; x += 0.6) {
-    pts.push(cx + x, wallH - 0.05, cz + side * (hd - 0.05));
+    pts.push(cx + x, top - 0.05, cz + side * (hd - 0.05));
     c.setHex(LIGHT_COLORS[k++ % LIGHT_COLORS.length]);
     cols.push(c.r, c.g, c.b);
   }
   addLights(pts, cols);
 
   W.houses.push({ x: cx, z: cz, w, d, wallH,
-    chimney: { x: chX, y: wallH + chH + 0.2, z: chZ, base: wallH, front: { x: cx, z: cz + d / 2 + 2.5 } } });
+    chimney: { x: chX, y: top + chH + 0.2, z: chZ, base: top, front: { x: cx, y: y0, z: cz + d / 2 + 2.5 } } });
 }
 
 // 車。alongX なら X 方向に長い。屋根に乗れる。
@@ -720,10 +722,11 @@ function xmasTree(x, z) {
   addLights(pts, cols);
 }
 
-// 街灯
-function lamp(x, z) {
+// 街灯。light が true のときだけ点光源を付ける（点光源は描画が重いので、区画に 1 本ずつ）
+function lamp(x, z, light) {
   solid(x, 0, z, 0.2, 4.6, 0.2, mat(0x2b2f3a));
   deco(new THREE.SphereGeometry(0.3, 12, 8), mat(0x000000, 0xffd7a0), x, 4.75, z);
+  if (!light) return;
   const L = new THREE.PointLight(0xffc98a, 1.4, 18, 2);
   L.position.set(x, 4.5, z);
   W.scene.add(L);
@@ -774,6 +777,58 @@ function sleigh(x, z) {
   const L = new THREE.PointLight(0xffd27a, 1.0, 10, 2);
   L.position.set(x, 2.5, z);
   W.scene.add(L);
+}
+
+// 地面の切れ目（川・線路・谷）。z0〜z1 には地面が無い。底 bedY に当たり判定の底を置く
+// （落ちると fallY でやり直しになるので底に立つことはない。底は空中の目印とカメラが働くため）
+function cut(z0, z1, bedY, bedMat) {
+  const zc = (z0 + z1) / 2, d = Math.abs(z1 - z0), hiZ = Math.max(z0, z1), loZ = Math.min(z0, z1);
+  addBox(0, bedY - 3.5, zc, 200, 3.5, d);
+  const bed = deco(new THREE.PlaneGeometry(200, d), bedMat, 0, bedY, zc);
+  bed.rotation.x = -Math.PI / 2;
+  // 両岸の石垣（切れ目の側を向く）
+  const a = deco(new THREE.PlaneGeometry(200, -bedY), mat(0x55586a), 0, bedY / 2, hiZ - 0.01);
+  a.rotation.y = Math.PI;
+  deco(new THREE.PlaneGeometry(200, -bedY), mat(0x55586a), 0, bedY / 2, loZ + 0.01);
+}
+
+// z0〜z1 の道路（x = -4〜4）と両側の歩道（高さ 0.15m）
+function road(z0, z1) {
+  const zc = (z0 + z1) / 2, d = Math.abs(z1 - z0);
+  const r = deco(new THREE.PlaneGeometry(8, d), mat(COL.road), 0, 0.01, zc);
+  r.rotation.x = -Math.PI / 2;
+  solid(5, 0, zc, 2, 0.15, d, mat(COL.walk));
+  solid(-5, 0, zc, 2, 0.15, d, mat(COL.walk));
+}
+
+// 通行止めの柵（道路の端。歩いては出られない。跳べば越えられる）
+function barrier(z) {
+  solid(0, 0, z, 8, 1.0, 0.3, mat(0xe0913a));
+}
+
+// 商店街の店。平屋根で、道路側（x = 0 の側）に明るいショーウィンドウ・看板・ひさし
+function shop(cx, cz, w, d, h, color, signColor) {
+  solid(cx, 0, cz, w, h, d, mat(color));
+  deco(new THREE.BoxGeometry(w + 0.2, 0.15, d + 0.2), mat(COL.roof), cx, h + 0.07, cz);   // 屋上の雪
+  const f = cx > 0 ? -1 : 1, fx = cx + f * (w / 2 + 0.02);                                // f: 道路側の向き
+  const win = deco(new THREE.PlaneGeometry(d * 0.7, 2.2), mat(0x000000, 0xffe2a8), fx, 1.6, cz);
+  win.rotation.y = f * Math.PI / 2;
+  const sign = deco(new THREE.PlaneGeometry(d * 0.8, 1.0), mat(0x000000, signColor), fx, h - 1.0, cz);
+  sign.rotation.y = f * Math.PI / 2;
+  const aw = deco(new THREE.BoxGeometry(1.4, 0.1, d * 0.8), mat(signColor), cx + f * (w / 2 + 0.6), 3.1, cz);
+  aw.rotation.z = -f * 0.35;
+}
+
+// 雪だるま（当たり判定は細い箱）
+function snowman(x, z) {
+  const white = mat(0xf4f6fb);
+  deco(new THREE.SphereGeometry(0.6, 16, 12), white, x, 0.6, z);
+  deco(new THREE.SphereGeometry(0.42, 16, 12), white, x, 1.5, z);
+  deco(new THREE.SphereGeometry(0.3, 14, 10), white, x, 2.15, z);
+  const nose = deco(new THREE.ConeGeometry(0.06, 0.3, 8), mat(0xff8a2a), x, 2.15, z + 0.38);
+  nose.rotation.x = Math.PI / 2;
+  deco(new THREE.CylinderGeometry(0.22, 0.22, 0.3, 12), mat(0x1b1b1f), x, 2.55, z);
+  addBox(x, 0, z, 1.0, 2.4, 1.0);
 }
 
 function buildWorld() {
