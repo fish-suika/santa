@@ -110,3 +110,12 @@ function lockPointer(canvas) {
   const p = canvas.requestPointerLock();
   if (p && p.catch) p.catch(() => {});
 }
+
+// スマホではじめるとき、全画面にして横向きに固定してみる（Android の Chrome など。できない端末では何もしない）
+function tryLandscape() {
+  const el = document.documentElement;
+  if (!el.requestFullscreen) return;
+  el.requestFullscreen().then(() => {
+    if (screen.orientation && screen.orientation.lock) return screen.orientation.lock('landscape');
+  }).catch(() => {});
+}

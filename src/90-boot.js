@@ -64,6 +64,8 @@
 
   // タイトル：クリック・タップで始める
   let started = false;
+  // スマホが縦向きの間は案内（#rotate）を出してゲームを止める
+  const portrait = matchMedia('(orientation: portrait) and (pointer: coarse)');
   const title = document.getElementById('title');
   title.addEventListener('touchstart', () => { INPUT.touch = true; document.body.classList.add('touch'); }, { passive: true });
   title.addEventListener('click', () => {
@@ -73,6 +75,7 @@
     setObjective(objectiveText());
     const cv = renderer.domElement;
     if (!INPUT.touch) lockPointer(cv);
+    else tryLandscape();
   });
 
   let last = performance.now(), t = 0, walked = 0;
@@ -80,7 +83,7 @@
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     t += dt;
-    if (started) {
+    if (started && !portrait.matches) {
       const l = takeLook();
       camLook(l.x, l.y);
       const bx = santa.pos.x, bz = santa.pos.z;
