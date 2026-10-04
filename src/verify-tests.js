@@ -172,6 +172,117 @@ test('cameraPlace: 壁が近すぎても camMinDist より寄らない', () => {
   near(p.dist, CFG.camMinDist, 1e-9);
 });
 
+// ===== 真下の地面・屋根 =====
+test('groundBelow: 真下で一番高い面。上にある箱は数えない。何も無ければ -Infinity', () => {
+  const boxes = [ground(), makeBox(0, 0, 0, 4, 2, 4), makeBox(0, 10, 0, 4, 1, 4)];
+  eq(groundBelow({ x: 0, y: 5, z: 0 }, boxes), 2);
+  eq(groundBelow({ x: 5, y: 5, z: 0 }, boxes), 0);
+  eq(groundBelow({ x: 0, y: 20, z: 0 }, boxes), 11);
+  eq(groundBelow({ x: 0, y: 5, z: 0 }, []), -Infinity);
+});
+
+test('roofSteps: 8 段。一番下は屋根の幅いっぱい、段の高さは歩いて上がれる', () => {
+  const r = roofSteps(0, 5, 0, 10, 2.4, 4.4);
+  eq(r.length, 8);
+  near(r[0].maxZ - r[0].minZ, 8.8, 1e-9, '一番下の奥行');
+  near(r[0].maxX - r[0].minX, 10, 1e-9, '棟の方向の長さ');
+  for (let i = 1; i < 8; i++) eq(r[i].maxY - r[i - 1].maxY <= CFG.stepHeight, true, i + '段目の高さ');
+});
+
+test('roofSteps: 屋根に落ちると斜面の少し上に乗る（体の幅のぶん棟側の段に乗る）', () => {
+  const boxes = [ground(), ...roofSteps(0, 5, 0, 10, 2.4, 4.4)];
+  for (const z of [3.5, 2, 0.8]) {
+    const b = { pos: { x: 0, y: 12, z }, vel: { x: 0, y: 0, z: 0 }, onGround: false };
+    for (let i = 0; i < 120; i++) moveBody(b, 1 / 60, boxes);
+    const slope = 5 + 2.4 * (1 - z / 4.4);
+    eq(b.onGround, true, 'z=' + z + ' で着地');
+    eq(b.pos.y >= slope - 0.01 && b.pos.y <= slope + 0.45, true, 'z=' + z + ' 斜面 ' + slope.toFixed(2) + ' に対して ' + b.pos.y.toFixed(2));
+  }
+});
+
+// ===== ジャンプ =====
+const JUMP = { x: 0, z: 0, jump: true };
+function inAir(vx) {
+  const s = newSanta(0, 0);
+  s.pos.y = 50; s.vel.x = vx;
+  return s;
+}
+
+test('ジャンプ: 最高点は約 jumpHeight（13.2〜14.05m）', () => {
+  const s = newSanta(0, 0);
+  walk(s, STOP, 0, 0.2, [ground()]);
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  let top = 0;
+  for (let i = 0; i < 180; i++) { santaStep(s, STOP, 0, 1 / 60, [ground()]); top = Math.max(top, s.pos.y); }
+  eq(top >= 13.2 && top <= 14.05, true, '最高点 ' + top.toFixed(2));
+  eq(s.onGround, true, '最後は着地している');
+});
+
+test('ジャンプ: 跳んだ瞬間に jumped が立つ', () => {
+  const s = newSanta(0, 0);
+  walk(s, STOP, 0, 0.2, [ground()]);
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  eq(s.jumped, true);
+});
+
+test('ジャンプ: 空中ではもう一度跳べない', () => {
+  const s = newSanta(0, 0);
+  walk(s, STOP, 0, 0.2, [ground()]);
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  walk(s, STOP, 0, 0.5, [ground()]);
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  eq(s.vel.y < 20, true, '上向きの速さ ' + s.vel.y.toFixed(1));
+});
+
+test('ジャンプ: 着地の少し前（0.1 秒前）に押しても、着地したら跳ぶ', () => {
+  const s = newSanta(0, 0);
+  s.pos.y = 0.15;
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  let maxVy = -Infinity;
+  for (let i = 0; i < 30; i++) { santaStep(s, STOP, 0, 1 / 60, [ground()]); maxVy = Math.max(maxVy, s.vel.y); }
+  eq(maxVy > 20, true, '上向きの最大 ' + maxVy.toFixed(1));
+});
+
+test('ジャンプ: 着地のずっと前（0.45 秒前）に押したものは無効', () => {
+  const s = newSanta(0, 0);
+  s.pos.y = 3;
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  let maxVy = -Infinity;
+  for (let i = 0; i < 60; i++) { santaStep(s, STOP, 0, 1 / 60, [ground()]); maxVy = Math.max(maxVy, s.vel.y); }
+  eq(maxVy < 1, true, '上向きの最大 ' + maxVy.toFixed(1));
+});
+
+test('ジャンプ: 足場から歩いて落ちた直後なら跳べる', () => {
+  const boxes = [ground(), makeBox(0, 0, 0, 4, 2, 40)];
+  const s = newSanta(1.5, 0);
+  s.pos.y = 2;
+  walk(s, STOP, 0, 0.2, boxes);
+  for (let i = 0; i < 60 && s.onGround; i++) santaStep(s, FWD, EAST, 1 / 60, boxes);
+  eq(s.onGround, false, '足場から落ちた');
+  santaStep(s, { x: 0, z: 1, jump: true }, EAST, 1 / 60, boxes);
+  eq(s.vel.y > 20, true, '上向きの速さ ' + s.vel.y.toFixed(1));
+});
+
+test('空中: 入力が無ければ横の勢いはそのまま', () => {
+  const s = inAir(6);
+  walk(s, STOP, 0, 0.5, []);
+  near(s.vel.x, 6, 1e-9);
+});
+
+test('空中: 逆へ入れても airAccel でしか変わらない（0.25 秒で 6 → 4）', () => {
+  const s = inAir(6);
+  walk(s, { x: -1, z: 0 }, 0, 0.25, []);
+  near(s.vel.x, 6 - CFG.airAccel * 0.25, 0.05);
+});
+
+test('着地: 着地した瞬間の落ちる速さを landSpeed に残す', () => {
+  const s = newSanta(0, 0);
+  s.pos.y = 5;
+  let land = 0;
+  for (let i = 0; i < 90; i++) { santaStep(s, STOP, 0, 1 / 60, [ground()]); if (s.landSpeed > 0) { land = s.landSpeed; s.landSpeed = 0; } }
+  eq(land > 15 && land < 18, true, '落ちる速さ ' + land.toFixed(1) + '（5m 落下で約 17.3）');
+});
+
 // ===== 結果表示 =====
 (function () {
   const out = document.getElementById('out');

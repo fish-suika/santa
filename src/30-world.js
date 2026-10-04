@@ -48,8 +48,7 @@ function house(cx, cz, w, d, wallH, wallColor) {
   g.translate(0, 0, -len / 2);
   const roof = deco(g, mat(COL.roof), cx, wallH, cz);
   roof.rotation.y = Math.PI / 2;
-  const n = 8;
-  for (let i = 0; i < n; i++) addBox(cx, wallH, cz, len, roofH * (i + 0.5) / n, hd * 2 * (1 - i / n));
+  for (const b of roofSteps(cx, wallH, cz, len, roofH, hd)) PHYS.boxes.push(b);
 
   // 煙突（配達先になる）
   const chH = roofH + 1.0, chX = cx + w * 0.25, chZ = cz + d * 0.18;

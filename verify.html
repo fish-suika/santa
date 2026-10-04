@@ -32,6 +32,12 @@ const CFG = {
   groundAccel: 40,      // 最高速度へ近づく速さ m/s²（止まるときも同じ）
   stepHeight: 0.35,     // これ以下の段差は歩いて上がれる
 
+  // ジャンプ
+  jumpHeight: 14,       // 最高点 m（家の屋根を軽く越える）
+  airAccel: 8,          // 空中で速さを変えられる強さ m/s²（地上の 1/5。入力が無ければ勢いが残る）
+  jumpBuffer: 0.12,     // 着地のこの秒数前に押したジャンプも受け付ける
+  coyoteTime: 0.1,      // 足場から落ちてこの秒数以内ならまだ跳べる
+
   // 落下
   gravity: 30,          // m/s²
   maxFall: 60,          // 落下速度の上限 m/s
@@ -45,6 +51,10 @@ const CFG = {
   camMinDist: 1.2,      // 壁に寄ったときの最短距離
   mouseSens: 0.0025,    // マウス 1px あたりの回転（ラジアン）
   touchSens: 0.006,     // タッチ 1px あたりの回転（ラジアン）
+
+  // 空中のカメラ（着地点が画面に入るように）
+  camAirDrop: 0.45,     // 地面からの高さのこの割合だけ、注視点を下げる
+  camAirPitch: 0.5,     // 最高点で見下ろし角にこれだけ足す（ラジアン。高さに比例）
 };
 // ===== 当たり判定（three.js に依存しない。verify から直接試す） =====
 // 箱は {minX,maxX,minY,maxY,minZ,maxZ}。街の当たり判定はすべてこの箱で表す。
@@ -150,6 +160,24 @@ function rayBox(o, dir, b) {
     if (tmin > tmax) return Infinity;
   }
   return tmin;
+}
+
+// 点 p の真下（x, z が同じ）で、p.y 以下にある一番高い面の高さ。無ければ -Infinity
+function groundBelow(p, boxes) {
+  let best = -Infinity;
+  for (const b of boxes) {
+    if (p.x < b.minX || p.x > b.maxX || p.z < b.minZ || p.z > b.maxZ) continue;
+    if (b.maxY <= p.y + 0.01 && b.maxY > best) best = b.maxY;
+  }
+  return best;
+}
+
+// 三角屋根の当たり判定。棟は X 方向（長さ len）、斜面は Z 方向（中心から軒先まで hd）。
+// 8 段の階段で近似する。1 段は roofH / 8（屋根 2.4m で 0.3m）で、歩いて上がれる高さ以下。
+function roofSteps(cx, wallH, cz, len, roofH, hd) {
+  const n = 8, out = [];
+  for (let i = 0; i < n; i++) out.push(makeBox(cx, wallH, cz, len, roofH * (i + 0.5) / n, hd * 2 * (1 - i / n)));
+  return out;
 }
 // ===== サンタとカメラの操作（three.js に依存しない） =====
 function newSanta(x, z) {
@@ -366,6 +394,117 @@ test('cameraPlace: noCam の箱（街の端の見えない壁）は無視する'
 test('cameraPlace: 壁が近すぎても camMinDist より寄らない', () => {
   const p = cameraPlace({ x: 0, y: 1.4, z: 0 }, 0, 0, [makeBox(0, 0, 0.8, 10, 5, 0.2)]);
   near(p.dist, CFG.camMinDist, 1e-9);
+});
+
+// ===== 真下の地面・屋根 =====
+test('groundBelow: 真下で一番高い面。上にある箱は数えない。何も無ければ -Infinity', () => {
+  const boxes = [ground(), makeBox(0, 0, 0, 4, 2, 4), makeBox(0, 10, 0, 4, 1, 4)];
+  eq(groundBelow({ x: 0, y: 5, z: 0 }, boxes), 2);
+  eq(groundBelow({ x: 5, y: 5, z: 0 }, boxes), 0);
+  eq(groundBelow({ x: 0, y: 20, z: 0 }, boxes), 11);
+  eq(groundBelow({ x: 0, y: 5, z: 0 }, []), -Infinity);
+});
+
+test('roofSteps: 8 段。一番下は屋根の幅いっぱい、段の高さは歩いて上がれる', () => {
+  const r = roofSteps(0, 5, 0, 10, 2.4, 4.4);
+  eq(r.length, 8);
+  near(r[0].maxZ - r[0].minZ, 8.8, 1e-9, '一番下の奥行');
+  near(r[0].maxX - r[0].minX, 10, 1e-9, '棟の方向の長さ');
+  for (let i = 1; i < 8; i++) eq(r[i].maxY - r[i - 1].maxY <= CFG.stepHeight, true, i + '段目の高さ');
+});
+
+test('roofSteps: 屋根に落ちると斜面の少し上に乗る（体の幅のぶん棟側の段に乗る）', () => {
+  const boxes = [ground(), ...roofSteps(0, 5, 0, 10, 2.4, 4.4)];
+  for (const z of [3.5, 2, 0.8]) {
+    const b = { pos: { x: 0, y: 12, z }, vel: { x: 0, y: 0, z: 0 }, onGround: false };
+    for (let i = 0; i < 120; i++) moveBody(b, 1 / 60, boxes);
+    const slope = 5 + 2.4 * (1 - z / 4.4);
+    eq(b.onGround, true, 'z=' + z + ' で着地');
+    eq(b.pos.y >= slope - 0.01 && b.pos.y <= slope + 0.45, true, 'z=' + z + ' 斜面 ' + slope.toFixed(2) + ' に対して ' + b.pos.y.toFixed(2));
+  }
+});
+
+// ===== ジャンプ =====
+const JUMP = { x: 0, z: 0, jump: true };
+function inAir(vx) {
+  const s = newSanta(0, 0);
+  s.pos.y = 50; s.vel.x = vx;
+  return s;
+}
+
+test('ジャンプ: 最高点は約 jumpHeight（13.2〜14.05m）', () => {
+  const s = newSanta(0, 0);
+  walk(s, STOP, 0, 0.2, [ground()]);
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  let top = 0;
+  for (let i = 0; i < 180; i++) { santaStep(s, STOP, 0, 1 / 60, [ground()]); top = Math.max(top, s.pos.y); }
+  eq(top >= 13.2 && top <= 14.05, true, '最高点 ' + top.toFixed(2));
+  eq(s.onGround, true, '最後は着地している');
+});
+
+test('ジャンプ: 跳んだ瞬間に jumped が立つ', () => {
+  const s = newSanta(0, 0);
+  walk(s, STOP, 0, 0.2, [ground()]);
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  eq(s.jumped, true);
+});
+
+test('ジャンプ: 空中ではもう一度跳べない', () => {
+  const s = newSanta(0, 0);
+  walk(s, STOP, 0, 0.2, [ground()]);
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  walk(s, STOP, 0, 0.5, [ground()]);
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  eq(s.vel.y < 20, true, '上向きの速さ ' + s.vel.y.toFixed(1));
+});
+
+test('ジャンプ: 着地の少し前（0.1 秒前）に押しても、着地したら跳ぶ', () => {
+  const s = newSanta(0, 0);
+  s.pos.y = 0.15;
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  let maxVy = -Infinity;
+  for (let i = 0; i < 30; i++) { santaStep(s, STOP, 0, 1 / 60, [ground()]); maxVy = Math.max(maxVy, s.vel.y); }
+  eq(maxVy > 20, true, '上向きの最大 ' + maxVy.toFixed(1));
+});
+
+test('ジャンプ: 着地のずっと前（0.45 秒前）に押したものは無効', () => {
+  const s = newSanta(0, 0);
+  s.pos.y = 3;
+  santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+  let maxVy = -Infinity;
+  for (let i = 0; i < 60; i++) { santaStep(s, STOP, 0, 1 / 60, [ground()]); maxVy = Math.max(maxVy, s.vel.y); }
+  eq(maxVy < 1, true, '上向きの最大 ' + maxVy.toFixed(1));
+});
+
+test('ジャンプ: 足場から歩いて落ちた直後なら跳べる', () => {
+  const boxes = [ground(), makeBox(0, 0, 0, 4, 2, 40)];
+  const s = newSanta(1.5, 0);
+  s.pos.y = 2;
+  walk(s, STOP, 0, 0.2, boxes);
+  for (let i = 0; i < 60 && s.onGround; i++) santaStep(s, FWD, EAST, 1 / 60, boxes);
+  eq(s.onGround, false, '足場から落ちた');
+  santaStep(s, { x: 0, z: 1, jump: true }, EAST, 1 / 60, boxes);
+  eq(s.vel.y > 20, true, '上向きの速さ ' + s.vel.y.toFixed(1));
+});
+
+test('空中: 入力が無ければ横の勢いはそのまま', () => {
+  const s = inAir(6);
+  walk(s, STOP, 0, 0.5, []);
+  near(s.vel.x, 6, 1e-9);
+});
+
+test('空中: 逆へ入れても airAccel でしか変わらない（0.25 秒で 6 → 4）', () => {
+  const s = inAir(6);
+  walk(s, { x: -1, z: 0 }, 0, 0.25, []);
+  near(s.vel.x, 6 - CFG.airAccel * 0.25, 0.05);
+});
+
+test('着地: 着地した瞬間の落ちる速さを landSpeed に残す', () => {
+  const s = newSanta(0, 0);
+  s.pos.y = 5;
+  let land = 0;
+  for (let i = 0; i < 90; i++) { santaStep(s, STOP, 0, 1 / 60, [ground()]); if (s.landSpeed > 0) { land = s.landSpeed; s.landSpeed = 0; } }
+  eq(land > 15 && land < 18, true, '落ちる速さ ' + land.toFixed(1) + '（5m 落下で約 17.3）');
 });
 
 // ===== 結果表示 =====

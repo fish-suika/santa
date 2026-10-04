@@ -103,3 +103,21 @@ function rayBox(o, dir, b) {
   }
   return tmin;
 }
+
+// 点 p の真下（x, z が同じ）で、p.y 以下にある一番高い面の高さ。無ければ -Infinity
+function groundBelow(p, boxes) {
+  let best = -Infinity;
+  for (const b of boxes) {
+    if (p.x < b.minX || p.x > b.maxX || p.z < b.minZ || p.z > b.maxZ) continue;
+    if (b.maxY <= p.y + 0.01 && b.maxY > best) best = b.maxY;
+  }
+  return best;
+}
+
+// 三角屋根の当たり判定。棟は X 方向（長さ len）、斜面は Z 方向（中心から軒先まで hd）。
+// 8 段の階段で近似する。1 段は roofH / 8（屋根 2.4m で 0.3m）で、歩いて上がれる高さ以下。
+function roofSteps(cx, wallH, cz, len, roofH, hd) {
+  const n = 8, out = [];
+  for (let i = 0; i < n; i++) out.push(makeBox(cx, wallH, cz, len, roofH * (i + 0.5) / n, hd * 2 * (1 - i / n)));
+  return out;
+}

@@ -58,6 +58,12 @@ const CFG = {
   groundAccel: 40,      // 最高速度へ近づく速さ m/s²（止まるときも同じ）
   stepHeight: 0.35,     // これ以下の段差は歩いて上がれる
 
+  // ジャンプ
+  jumpHeight: 14,       // 最高点 m（家の屋根を軽く越える）
+  airAccel: 8,          // 空中で速さを変えられる強さ m/s²（地上の 1/5。入力が無ければ勢いが残る）
+  jumpBuffer: 0.12,     // 着地のこの秒数前に押したジャンプも受け付ける
+  coyoteTime: 0.1,      // 足場から落ちてこの秒数以内ならまだ跳べる
+
   // 落下
   gravity: 30,          // m/s²
   maxFall: 60,          // 落下速度の上限 m/s
@@ -71,6 +77,10 @@ const CFG = {
   camMinDist: 1.2,      // 壁に寄ったときの最短距離
   mouseSens: 0.0025,    // マウス 1px あたりの回転（ラジアン）
   touchSens: 0.006,     // タッチ 1px あたりの回転（ラジアン）
+
+  // 空中のカメラ（着地点が画面に入るように）
+  camAirDrop: 0.45,     // 地面からの高さのこの割合だけ、注視点を下げる
+  camAirPitch: 0.5,     // 最高点で見下ろし角にこれだけ足す（ラジアン。高さに比例）
 };
 // ===== 当たり判定（three.js に依存しない。verify から直接試す） =====
 // 箱は {minX,maxX,minY,maxY,minZ,maxZ}。街の当たり判定はすべてこの箱で表す。
@@ -176,6 +186,24 @@ function rayBox(o, dir, b) {
     if (tmin > tmax) return Infinity;
   }
   return tmin;
+}
+
+// 点 p の真下（x, z が同じ）で、p.y 以下にある一番高い面の高さ。無ければ -Infinity
+function groundBelow(p, boxes) {
+  let best = -Infinity;
+  for (const b of boxes) {
+    if (p.x < b.minX || p.x > b.maxX || p.z < b.minZ || p.z > b.maxZ) continue;
+    if (b.maxY <= p.y + 0.01 && b.maxY > best) best = b.maxY;
+  }
+  return best;
+}
+
+// 三角屋根の当たり判定。棟は X 方向（長さ len）、斜面は Z 方向（中心から軒先まで hd）。
+// 8 段の階段で近似する。1 段は roofH / 8（屋根 2.4m で 0.3m）で、歩いて上がれる高さ以下。
+function roofSteps(cx, wallH, cz, len, roofH, hd) {
+  const n = 8, out = [];
+  for (let i = 0; i < n; i++) out.push(makeBox(cx, wallH, cz, len, roofH * (i + 0.5) / n, hd * 2 * (1 - i / n)));
+  return out;
 }
 // ===== サンタとカメラの操作（three.js に依存しない） =====
 function newSanta(x, z) {
@@ -310,8 +338,7 @@ function house(cx, cz, w, d, wallH, wallColor) {
   g.translate(0, 0, -len / 2);
   const roof = deco(g, mat(COL.roof), cx, wallH, cz);
   roof.rotation.y = Math.PI / 2;
-  const n = 8;
-  for (let i = 0; i < n; i++) addBox(cx, wallH, cz, len, roofH * (i + 0.5) / n, hd * 2 * (1 - i / n));
+  for (const b of roofSteps(cx, wallH, cz, len, roofH, hd)) PHYS.boxes.push(b);
 
   // 煙突（配達先になる）
   const chH = roofH + 1.0, chX = cx + w * 0.25, chZ = cz + d * 0.18;
