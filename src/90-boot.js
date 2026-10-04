@@ -7,6 +7,8 @@
 
   W.scene = new THREE.Scene();
   buildWorld();
+  buildWires();
+  buildCars();
   makeSnow();
   const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 400);
   CAM.cam = camera;
@@ -82,7 +84,22 @@
       const mv = playing ? readMove() : { x: 0, z: 0 };
       mv.jump = takeJump() && playing;
       const act = takeAct();
+      for (const c of HZ.cars) {
+        if (updateCar(c, santa, dt) !== 'hit') continue;
+        sndHonk();
+        if (dropPresent(run)) {
+          throwPresent(sm);
+          sndDrop();
+          showToast('車にはねられて、プレゼントを落とした！', CFG.dropDelay);
+        } else {
+          showToast('車にはねられた！', 1.2);
+        }
+      }
       santaStep(santa, mv, CAM.yaw, dt, PHYS.boxes);
+      if (checkWires(santa, COURSE.wires, dt)) {
+        sndBoing();
+        showToast('電線に引っかかった！', 1.0);
+      }
       if (santa.jumped) { santa.jumped = false; sndJump(); }
       if (santa.landSpeed > 0) {
         // 歩道の段差を降りたくらいの小さな着地は無視する
@@ -146,6 +163,7 @@
     updateHud(dt);
     updateBeacon(beacon, run.cleared ? null : run.targets[run.target], santa, dt, t);
     updateFx(dt);
+    updateHazardViews(dt, t);
     updateMarker(mk, santa, t);
     updateCamera(santa, dt);
     updateSnow(santa.pos, dt, t);

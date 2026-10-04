@@ -133,3 +133,34 @@ function sndClear() {
   const t = c.currentTime;
   [784, 988, 1175, 1568, 1319, 1568].forEach((f, i) => sndTone(f, t + i * 0.14, i === 5 ? 0.9 : 0.3, 'triangle', 0.18));
 }
+
+// 電線「ビヨーン」（音程が揺れながら下がる）
+function sndBoing() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  const o = c.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(260, t);
+  o.frequency.exponentialRampToValueAtTime(120, t + 0.5);
+  const lfo = c.createOscillator(); lfo.frequency.value = 18;
+  const lg = c.createGain(); lg.gain.value = 60;
+  lfo.connect(lg); lg.connect(o.frequency);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+  o.connect(g); g.connect(SND.out);
+  o.start(t); lfo.start(t);
+  o.stop(t + 0.6); lfo.stop(t + 0.6);
+}
+
+// クラクション「プップー」
+function sndHonk() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  for (const f of [440, 554]) {
+    sndTone(f, t, 0.12, 'square', 0.08);
+    sndTone(f, t + 0.16, 0.3, 'square', 0.08);
+  }
+}
