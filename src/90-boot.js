@@ -9,6 +9,8 @@
   buildWorld();
   buildWires();
   buildCars();
+  buildTrain();
+  buildRunaway();
   makeSnow();
   const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 400);
   CAM.cam = camera;
@@ -46,6 +48,8 @@
     run = newRun(targets);
     placeAt(santa, COURSE.start);
     clearThrown(sm);
+    resetRunaway(HZ.runaway);
+    HZ.runaway.noticed = false;
     hideClear();
     setObjective(objectiveText());
     if (!INPUT.touch) lockPointer(renderer.domElement);
@@ -94,6 +98,19 @@
         } else {
           showToast('車にはねられた！', 1.2);
         }
+      }
+      // 理不尽ギミック：動き出す列車・逃げる家
+      if (updateTrain(HZ.train, santa, dt) === 'start') {
+        sndWhistle();
+        showToast('列車が動き出した！？', 1.6);
+      }
+      const ra = HZ.runaway, raRes = stepRunaway(ra, santa, dt, run.state === 'play' && run.target === ra.target);
+      if (raRes === 'flee' && !ra.noticed) {
+        ra.noticed = true;
+        sndScurry();
+        showToast('家が逃げた！？', 1.6);
+      } else if (raRes === 'caught') {
+        showToast('つかまえた！', 1.2);
       }
       santaStep(santa, mv, CAM.yaw, dt, PHYS.boxes);
       if (checkWires(santa, COURSE.wires, dt)) {

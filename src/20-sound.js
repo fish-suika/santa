@@ -164,3 +164,19 @@ function sndHonk() {
     sndTone(f, t + 0.16, 0.3, 'square', 0.08);
   }
 }
+
+// 汽笛「ポーッ」（3 つの音を重ねる）
+function sndWhistle() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  for (const f of [587, 740, 880]) sndTone(f, t, 0.9, 'triangle', 0.07);
+}
+
+// 家が逃げる足音「トコトコトコ」
+function sndScurry() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  for (let i = 0; i < 8; i++) sndTone(i % 2 ? 660 : 520, t + i * 0.07, 0.06, 'square', 0.06);
+}

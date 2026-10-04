@@ -832,6 +832,22 @@ function sndHonk() {
     sndTone(f, t + 0.16, 0.3, 'square', 0.08);
   }
 }
+
+// 汽笛「ポーッ」（3 つの音を重ねる）
+function sndWhistle() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  for (const f of [587, 740, 880]) sndTone(f, t, 0.9, 'triangle', 0.07);
+}
+
+// 家が逃げる足音「トコトコトコ」
+function sndScurry() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  for (let i = 0; i < 8; i++) sndTone(i % 2 ? 660 : 520, t + i * 0.07, 0.06, 'square', 0.06);
+}
 // ===== 街（見た目と当たり判定を一緒に作る） =====
 const W = { scene: null, houses: [], snow: null };
 
@@ -1062,22 +1078,6 @@ function snowman(x, z) {
   addBox(x, 0, z, 1.0, 2.4, 1.0);
 }
 
-// 掘割の底に止まっている列車。x 方向に車両（長さ 18m）が並び、連結部（1.5m）は隙間。屋根に乗れる
-function train(zc) {
-  const TR = COURSE.train, top = -2.5 + TR.h;
-  for (let cx = -39; cx <= 39; cx += 19.5) {     // 道路の真ん中（x=0）に車両が来るように並べる（隙間は x=±9〜10.5、±28.5〜30）
-    solid(cx, -2.5, zc, 18, TR.h, TR.w, mat(0x2f6f4f));
-    deco(new THREE.BoxGeometry(18, 0.12, TR.w - 0.2), mat(COL.snow), cx, top + 0.06, zc);       // 屋根の雪
-    for (const sd of [1, -1]) {
-      deco(new THREE.BoxGeometry(18.02, 0.35, 0.05), mat(0xd8322c), cx, top - 2.6, zc + sd * (TR.w / 2 + 0.01));   // 赤い帯
-      for (let wx = -7.5; wx <= 7.5; wx += 2.5) {                                                // 明かりのついた窓
-        const win = deco(new THREE.PlaneGeometry(1.6, 1.0), mat(0x000000, COL.glass), cx + wx, top - 1.4, zc + sd * (TR.w / 2 + 0.02));
-        if (sd < 0) win.rotation.y = Math.PI;
-      }
-    }
-  }
-}
-
 function buildWorld() {
   const s = W.scene;
   s.background = new THREE.Color(0x0b1430);
@@ -1104,10 +1104,9 @@ function buildWorld() {
   cut(R, -R, -2.5, mat(0x9fc6e8, 0x1a2a40));             // 凍った川
   cut(RL.z0, RL.z1, -2.5, mat(0x4a4642));                 // 線路の掘割
   cut(CY.z0, CY.z1, -8, mat(0x232838));                   // 谷
-  // 線路（見た目だけ）と、真ん中に止まっている列車
+  // 線路（見た目だけ）。止まっている列車は buildTrain()（34-hazards-view.js）で置く
   const railZ = (RL.z0 + RL.z1) / 2;
   for (const off of [-0.75, 0.75]) deco(new THREE.BoxGeometry(200, 0.15, 0.12), mat(0x9aa0aa), 0, -2.4, railZ + off);
-  train(railZ);
   // 落ちた橋（川の両岸。見た目だけ）
   for (const sd of [1, -1]) {
     const stub = deco(new THREE.BoxGeometry(8, 0.5, 3.2), mat(0x6b5a4a), 0, -1.3, sd * (R - 1.2));
@@ -1145,7 +1144,7 @@ function buildWorld() {
 
   // ======== 3 公園（z = -69〜-115） ========
   xmasTree(0, -90);
-  house(-24, -88, 9, 8, 4.5, 0xa9c3a0);          // ★ 3 軒目（公園のそばの家）
+  // ★ 3 軒目は逃げる家。buildRunaway()（34-hazards-view.js）で置く
   // 11m の展望台。縁（z=-111）は塀（z=-115）の 4m 手前。縁から跳べば塀を越える
   solid(18, 0, -108, 6, 11, 6, mat(0x8c7a64));
   deco(new THREE.BoxGeometry(6.2, 0.15, 6.2), mat(COL.roof), 18, 11.07, -108);
@@ -1233,7 +1232,7 @@ function updateSnow(center, dt, t) {
   a.needsUpdate = true;
 }
 // ===== 電線と走る車の見た目 =====
-const HZ = { wires: [], cars: [] };
+const HZ = { wires: [], cars: [], train: null, runaway: null };
 
 // 電線の束（3 本、横 0.6m おき）と、両端の電柱（電柱は電線の真下に立ち、当たり判定あり。腕木と電線は見た目だけ）
 function buildWires() {
@@ -1286,6 +1285,55 @@ function buildCars() {
   }
 }
 
+// 掘割の底に止まっている列車（8 両、19.5m おき。車両ごとに Group にして動かす。屋根に乗れる）
+function buildTrain() {
+  const RL = COURSE.rail, TR = COURSE.train, zc = (RL.z0 + RL.z1) / 2, top = -2.5 + TR.h;
+  const xs = [];
+  for (let k = -4; k <= 3; k++) xs.push(k * 19.5);   // 止まっている間は x=0（道路の真ん中）に車両がある
+  const tr = newTrain(xs, zc, 18, TR.w, -2.5, TR.h, 8 * 19.5);
+  for (const c of tr.cars) {
+    PHYS.boxes.push(c.box);
+    const g = new THREE.Group();
+    const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
+    add(new THREE.BoxGeometry(18, TR.h, TR.w), mat(0x2f6f4f), 0, -2.5 + TR.h / 2, zc);
+    add(new THREE.BoxGeometry(18, 0.12, TR.w - 0.2), mat(COL.snow), 0, top + 0.06, zc);           // 屋根の雪
+    for (const sd of [1, -1]) {
+      add(new THREE.BoxGeometry(18.02, 0.35, 0.05), mat(0xd8322c), 0, top - 2.6, zc + sd * (TR.w / 2 + 0.01));   // 赤い帯
+      for (let wx = -7.5; wx <= 7.5; wx += 2.5) {                                                    // 明かりのついた窓
+        const win = add(new THREE.PlaneGeometry(1.6, 1.0), mat(0x000000, COL.glass), wx, top - 1.4, zc + sd * (TR.w / 2 + 0.02));
+        if (sd < 0) win.rotation.y = Math.PI;
+      }
+    }
+    g.position.x = c.x;
+    W.scene.add(g);
+    c.group = g;
+  }
+  HZ.train = tr;
+}
+
+// 逃げる家（3 軒目）。house() を呼んで、そのとき増えたメッシュと当たり判定の箱を捕まえ、いっしょに動かす
+function buildRunaway() {
+  const RA = COURSE.runaway;
+  const nBox = PHYS.boxes.length, nObj = W.scene.children.length;
+  house(RA.x, RA.z, 9, 8, 4.5, 0xa9c3a0);
+  const boxes = PHYS.boxes.slice(nBox), meshes = W.scene.children.slice(nObj);
+  for (const m of meshes) m.userData.base = m.position.clone();
+  const ra = newRunaway(RA.x, RA.z, boxes, W.houses[W.houses.length - 1].chimney, RA.bounds);
+  ra.meshes = meshes;
+  ra.target = RA.target;
+  ra.lift = 0;
+  ra.noticed = false;
+  // 脚（逃げている間だけ見える）
+  ra.legs = [];
+  for (const lx of [-2.5, 2.5]) for (const lz of [-2, 2]) {
+    const leg = deco(new THREE.CylinderGeometry(0.25, 0.2, 1.2, 8), mat(0x8a5a3a), RA.x + lx, 0.6, RA.z + lz);
+    leg.visible = false;
+    leg.userData.base = leg.position.clone();
+    ra.legs.push(leg);
+  }
+  HZ.runaway = ra;
+}
+
 function updateHazardViews(dt, t) {
   for (const hw of HZ.wires) {
     hw.w.shake = Math.max(0, hw.w.shake - dt * 2);
@@ -1294,6 +1342,22 @@ function updateHazardViews(dt, t) {
   for (const c of HZ.cars) {
     c.mesh.position.set(c.x, 0, c.z);
     c.mesh.rotation.y = c.dir > 0 ? Math.PI : 0;   // 進む向きに正面（-Z）を向ける
+  }
+  if (HZ.train) for (const c of HZ.train.cars) c.group.position.x = c.x;
+  const ra = HZ.runaway;
+  if (ra) {
+    // 逃げている間は家が持ち上がって脚が生え、トコトコ跳ねる（見た目だけ。当たり判定は地面のまま）
+    const running = ra.fleeing && !ra.caught;
+    ra.lift += ((running ? 1.2 : 0) - ra.lift) * Math.min(1, dt * 8);
+    const bob = running ? Math.abs(Math.sin(t * 12)) * 0.35 : 0;
+    const ox = ra.x - ra.x0, oz = ra.z - ra.z0, up = ra.lift + bob;
+    for (const m of ra.meshes) m.position.set(m.userData.base.x + ox, m.userData.base.y + up, m.userData.base.z + oz);
+    ra.legs.forEach((L, i) => {
+      L.visible = ra.lift > 0.1;
+      L.position.set(L.userData.base.x + ox, up / 2, L.userData.base.z + oz);
+      L.scale.y = Math.max(0.01, up / 1.2);
+      L.rotation.x = running ? Math.sin(t * 12 + i * Math.PI) * 0.5 : 0;
+    });
   }
 }
 // ===== サンタの見た目（正面は -Z） =====
@@ -1698,6 +1762,8 @@ function saveBest(v) {
   buildWorld();
   buildWires();
   buildCars();
+  buildTrain();
+  buildRunaway();
   makeSnow();
   const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 400);
   CAM.cam = camera;
@@ -1735,6 +1801,8 @@ function saveBest(v) {
     run = newRun(targets);
     placeAt(santa, COURSE.start);
     clearThrown(sm);
+    resetRunaway(HZ.runaway);
+    HZ.runaway.noticed = false;
     hideClear();
     setObjective(objectiveText());
     if (!INPUT.touch) lockPointer(renderer.domElement);
@@ -1783,6 +1851,19 @@ function saveBest(v) {
         } else {
           showToast('車にはねられた！', 1.2);
         }
+      }
+      // 理不尽ギミック：動き出す列車・逃げる家
+      if (updateTrain(HZ.train, santa, dt) === 'start') {
+        sndWhistle();
+        showToast('列車が動き出した！？', 1.6);
+      }
+      const ra = HZ.runaway, raRes = stepRunaway(ra, santa, dt, run.state === 'play' && run.target === ra.target);
+      if (raRes === 'flee' && !ra.noticed) {
+        ra.noticed = true;
+        sndScurry();
+        showToast('家が逃げた！？', 1.6);
+      } else if (raRes === 'caught') {
+        showToast('つかまえた！', 1.2);
       }
       santaStep(santa, mv, CAM.yaw, dt, PHYS.boxes);
       if (checkWires(santa, COURSE.wires, dt)) {

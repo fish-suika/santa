@@ -228,22 +228,6 @@ function snowman(x, z) {
   addBox(x, 0, z, 1.0, 2.4, 1.0);
 }
 
-// 掘割の底に止まっている列車。x 方向に車両（長さ 18m）が並び、連結部（1.5m）は隙間。屋根に乗れる
-function train(zc) {
-  const TR = COURSE.train, top = -2.5 + TR.h;
-  for (let cx = -39; cx <= 39; cx += 19.5) {     // 道路の真ん中（x=0）に車両が来るように並べる（隙間は x=±9〜10.5、±28.5〜30）
-    solid(cx, -2.5, zc, 18, TR.h, TR.w, mat(0x2f6f4f));
-    deco(new THREE.BoxGeometry(18, 0.12, TR.w - 0.2), mat(COL.snow), cx, top + 0.06, zc);       // 屋根の雪
-    for (const sd of [1, -1]) {
-      deco(new THREE.BoxGeometry(18.02, 0.35, 0.05), mat(0xd8322c), cx, top - 2.6, zc + sd * (TR.w / 2 + 0.01));   // 赤い帯
-      for (let wx = -7.5; wx <= 7.5; wx += 2.5) {                                                // 明かりのついた窓
-        const win = deco(new THREE.PlaneGeometry(1.6, 1.0), mat(0x000000, COL.glass), cx + wx, top - 1.4, zc + sd * (TR.w / 2 + 0.02));
-        if (sd < 0) win.rotation.y = Math.PI;
-      }
-    }
-  }
-}
-
 function buildWorld() {
   const s = W.scene;
   s.background = new THREE.Color(0x0b1430);
@@ -270,10 +254,9 @@ function buildWorld() {
   cut(R, -R, -2.5, mat(0x9fc6e8, 0x1a2a40));             // 凍った川
   cut(RL.z0, RL.z1, -2.5, mat(0x4a4642));                 // 線路の掘割
   cut(CY.z0, CY.z1, -8, mat(0x232838));                   // 谷
-  // 線路（見た目だけ）と、真ん中に止まっている列車
+  // 線路（見た目だけ）。止まっている列車は buildTrain()（34-hazards-view.js）で置く
   const railZ = (RL.z0 + RL.z1) / 2;
   for (const off of [-0.75, 0.75]) deco(new THREE.BoxGeometry(200, 0.15, 0.12), mat(0x9aa0aa), 0, -2.4, railZ + off);
-  train(railZ);
   // 落ちた橋（川の両岸。見た目だけ）
   for (const sd of [1, -1]) {
     const stub = deco(new THREE.BoxGeometry(8, 0.5, 3.2), mat(0x6b5a4a), 0, -1.3, sd * (R - 1.2));
@@ -311,7 +294,7 @@ function buildWorld() {
 
   // ======== 3 公園（z = -69〜-115） ========
   xmasTree(0, -90);
-  house(-24, -88, 9, 8, 4.5, 0xa9c3a0);          // ★ 3 軒目（公園のそばの家）
+  // ★ 3 軒目は逃げる家。buildRunaway()（34-hazards-view.js）で置く
   // 11m の展望台。縁（z=-111）は塀（z=-115）の 4m 手前。縁から跳べば塀を越える
   solid(18, 0, -108, 6, 11, 6, mat(0x8c7a64));
   deco(new THREE.BoxGeometry(6.2, 0.15, 6.2), mat(COL.roof), 18, 11.07, -108);
