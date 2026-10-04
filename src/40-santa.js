@@ -34,8 +34,9 @@ function makeSantaMesh() {
   add(new THREE.ConeGeometry(0.25, 0.45, 14), red, 0, 1.88, 0.02);                 // 帽子
   add(new THREE.SphereGeometry(0.08, 10, 8), white, 0, 2.12, 0.03);                // ぼんぼり
   add(new THREE.SphereGeometry(0.38, 14, 10), mat(0x9a6a3a), 0, 1.1, 0.42);        // 背中の袋
-  const present = makePresentMesh();     // 胸の前に抱えるプレゼント（持っているときだけ見える）
-  present.position.set(0, 1.0, -0.55);
+  // 頭の上に両手で掲げるプレゼント（持っているときだけ見える）。胸の前だと後ろからのカメラで体と袋に隠れるので上に掲げる
+  const present = makePresentMesh();
+  present.position.set(0, 2.1, -0.35);
   present.visible = false;
   g.add(present);
   W.scene.add(g);
@@ -64,8 +65,8 @@ function updateSantaMesh(sm, s, dt, t) {
     sm.armL.rotation.x = sm.armR.rotation.x = 2.6;
     sm.legL.rotation.x = 0.4; sm.legR.rotation.x = -0.4;
   }
-  // プレゼントを持っているときは、両腕を前に出して抱える
-  if (sm.carrying) sm.armL.rotation.x = sm.armR.rotation.x = 1.25;
+  // プレゼントを持っているときは、両腕を上げて頭の上に掲げる
+  if (sm.carrying) sm.armL.rotation.x = sm.armR.rotation.x = 2.9;
   sm.present.visible = sm.carrying;
   // 着地でつぶれて、すぐ戻る
   sm.squash = Math.max(0, sm.squash - dt * 2.5);
