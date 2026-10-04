@@ -31,7 +31,7 @@
     title.classList.add('off');
     sndInit();
     const cv = renderer.domElement;
-    if (!INPUT.touch && cv.requestPointerLock) cv.requestPointerLock();
+    if (!INPUT.touch) lockPointer(cv);
   });
 
   let last = performance.now(), t = 0, walked = 0;

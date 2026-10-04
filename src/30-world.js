@@ -126,10 +126,14 @@ function buildWorld() {
   const s = W.scene;
   s.background = new THREE.Color(0x0b1430);
   s.fog = new THREE.Fog(0x0b1430, 35, 120);
-  s.add(new THREE.HemisphereLight(0x9fb4ff, 0x30384f, 0.6));
+  s.add(new THREE.HemisphereLight(0x9fb4ff, 0x30384f, 0.8));
   const moon = new THREE.DirectionalLight(0xbfd0ff, 0.45);
   moon.position.set(-30, 60, -20);
   s.add(moon);
+  // 反対側から弱い暖色の光（家の明かりの照り返し）。月の当たらない面が真っ暗にならないように
+  const fill = new THREE.DirectionalLight(0xffd9b0, 0.3);
+  fill.position.set(30, 25, 40);
+  s.add(fill);
   const mm = new THREE.Mesh(new THREE.SphereGeometry(6, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff4d6, fog: false }));
   mm.position.set(-80, 70, -140);
   s.add(mm);

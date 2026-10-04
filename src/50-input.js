@@ -16,7 +16,7 @@ function initInput(canvas) {
     INPUT.lookY += e.movementY * CFG.mouseSens;
   });
   canvas.addEventListener('click', () => {
-    if (!INPUT.touch && canvas.requestPointerLock && document.pointerLockElement !== canvas) canvas.requestPointerLock();
+    if (!INPUT.touch && canvas.requestPointerLock && document.pointerLockElement !== canvas) lockPointer(canvas);
   });
 
   // タッチ：画面の左半分は移動スティック（触れた場所に出る）、右半分はドラッグで視点
@@ -80,4 +80,11 @@ function takeLook() {
   INPUT.lookX = 0;
   INPUT.lookY = 0;
   return l;
+}
+
+// マウスを画面に固定する。環境によって断られ、そのとき Promise が reject されるので握りつぶす
+function lockPointer(canvas) {
+  if (!canvas.requestPointerLock) return;
+  const p = canvas.requestPointerLock();
+  if (p && p.catch) p.catch(() => {});
 }
