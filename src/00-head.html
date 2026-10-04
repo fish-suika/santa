@@ -34,16 +34,24 @@
     border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08);display:none;pointer-events:none}
   #stick.on{display:block}
   #knob{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;background:rgba(255,255,255,.45)}
+
+  /* ---- スマホのジャンプボタン ---- */
+  #jumpBtn{position:fixed;right:24px;bottom:28px;z-index:6;width:92px;height:92px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.5);background:rgba(224,65,58,.55);color:#fff;font:700 16px var(--jp);
+    letter-spacing:.1em;display:none;touch-action:none}
+  body.touch #jumpBtn{display:block}
+  #jumpBtn:active{background:rgba(224,65,58,.85)}
 </style>
 </head>
 <body>
 <div id="title">
   <h1>サンタ、<span>ちゃんと</span>届けて</h1>
   <p>クリック / タップで はじめる</p>
-  <small>WASD 移動 ・ マウス 視点<br>スマホ：左で移動 ・ 右で視点</small>
+  <small>WASD 移動 ・ Space ジャンプ ・ マウス 視点<br>スマホ：左で移動 ・ 右で視点 ・ 右下でジャンプ</small>
 </div>
-<div id="hint">WASD 移動 ／ マウス 視点 ／ Esc でマウスを離す</div>
+<div id="hint">WASD 移動 ／ Space ジャンプ ／ マウス 視点 ／ Esc でマウスを離す</div>
 <div id="stick"><div id="knob"></div></div>
+<button id="jumpBtn">ジャンプ</button>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 "use strict";
