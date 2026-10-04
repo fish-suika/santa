@@ -11,7 +11,7 @@
   const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 400);
   CAM.cam = camera;
 
-  const START = { x: 0, z: 14 };
+  const START = COURSE.start;
   const santa = newSanta(START.x, START.z);
   const sm = makeSantaMesh();
   const mk = makeMarker();
@@ -61,8 +61,8 @@
         walked += Math.hypot(santa.pos.x - bx, santa.pos.z - bz);
         if (walked > 1.1) { walked = 0; sndStep(); }
       }
-      // 万一、街の外へ落ちたらスタートへ戻す
-      if (santa.pos.y < -30) {
+      // 川に落ちたらスタートへ戻す（Phase 3 で「プレゼントを落とす → 受け取り地点からやり直し」にする）
+      if (santa.pos.y < CFG.fallY) {
         santa.pos = { x: START.x, y: 0, z: START.z };
         santa.vel = { x: 0, y: 0, z: 0 };
       }
