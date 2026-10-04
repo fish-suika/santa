@@ -108,3 +108,28 @@ function sndDrop() {
   if (!c) return;
   sndTone(700, c.currentTime, 0.7, 'triangle', 0.22, 110);
 }
+
+// 届けた「シャラララン」（上がっていく 4 音）
+function sndDeliver() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  [1047, 1319, 1568, 2093].forEach((f, i) => sndTone(f, t + i * 0.08, 0.35, 'sine', 0.16));
+}
+
+// 違う家「ブブッ」
+function sndWrong() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  sndTone(180, t, 0.12, 'square', 0.08);
+  sndTone(150, t + 0.13, 0.18, 'square', 0.08);
+}
+
+// クリアのファンファーレ
+function sndClear() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  [784, 988, 1175, 1568, 1319, 1568].forEach((f, i) => sndTone(f, t + i * 0.14, i === 5 ? 0.9 : 0.3, 'triangle', 0.18));
+}

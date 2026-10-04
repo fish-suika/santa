@@ -63,21 +63,47 @@
     display:none;touch-action:none}
   body.touch #actBtn{display:block}
   #actBtn:active{background:rgba(255,210,122,.8)}
+
+  /* ---- タイム（右上）。左上の目的と重ならないよう目的の幅を詰める ---- */
+  #obj{max-width:calc(100vw - 140px)}
+  #timer{position:fixed;right:16px;top:16px;z-index:5;font-size:18px;font-variant-numeric:tabular-nums;letter-spacing:.05em;
+    background:rgba(8,14,36,.62);padding:6px 12px;border-radius:4px;text-shadow:0 1px 6px #000;pointer-events:none;display:none}
+  #timer.on{display:block}
+
+  /* ---- クリア画面 ---- */
+  #clear{position:fixed;inset:0;z-index:12;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;padding:16px;text-align:center;background:rgba(8,14,36,.72)}
+  #clear.on{display:flex}
+  #clear h2{font-size:clamp(28px,6vw,52px);letter-spacing:.08em;color:var(--gold);text-shadow:0 2px 18px rgba(0,0,0,.6)}
+  #clear p{font-size:16px;letter-spacing:.12em}
+  #clear .time{font-size:22px}
+  #clear .time b{font-size:30px;font-variant-numeric:tabular-nums}
+  #clearBest{color:var(--gold)}
+  #againBtn{margin-top:10px;font:700 18px var(--jp);letter-spacing:.15em;color:#fff;background:var(--red);border:0;
+    border-radius:28px;padding:12px 34px;cursor:pointer}
 </style>
 </head>
 <body>
 <div id="title">
   <h1>サンタ、<span>ちゃんと</span>届けて</h1>
   <p>クリック / タップで はじめる</p>
-  <small>WASD 移動 ・ Space ジャンプ ・ E 受け取る ・ マウス 視点<br>スマホ：左で移動 ・ 右で視点 ・ 右下のボタン</small>
+  <small>WASD 移動 ・ Space ジャンプ ・ E 受け取る・届ける ・ マウス 視点<br>スマホ：左で移動 ・ 右で視点 ・ 右下のボタン</small>
 </div>
-<div id="hint">WASD 移動 ／ Space ジャンプ ／ E 受け取る ／ マウス 視点 ／ Esc でマウスを離す</div>
+<div id="hint">WASD 移動 ／ Space ジャンプ ／ E 受け取る・届ける ／ マウス 視点 ／ Esc でマウスを離す</div>
 <div id="stick"><div id="knob"></div></div>
 <button id="jumpBtn">ジャンプ</button>
 <button id="actBtn">受け取る</button>
 <div id="obj"><b>いまやること</b><span id="objText"></span></div>
 <div id="toast"></div>
 <div id="prompt"></div>
+<div id="timer"></div>
+<div id="clear">
+  <h2>ぜんぶ届けた！</h2>
+  <p>メリークリスマス</p>
+  <p class="time">タイム <b id="clearTime"></b></p>
+  <p id="clearBest"></p>
+  <button id="againBtn">もう一度</button>
+</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 "use strict";

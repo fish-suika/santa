@@ -15,7 +15,39 @@
   const santa = newSanta(START.x, START.z);
   const sm = makeSantaMesh();
   const mk = makeMarker();
-  const run = newRun();
+  // 配達先：COURSE.targets の家の煙突を、届ける順に並べる
+  const chimneys = W.houses.map(h => h.chimney);
+  const targets = COURSE.targets.map(tg => W.houses.find(h => h.x === tg.x && h.z === tg.z).chimney);
+  let run = newRun(targets);
+  let best = loadBest();
+  const beacon = makeBeacon();
+
+  function objectiveText() {
+    if (!run.carrying && run.target === 0) return 'そりでプレゼントを受け取ろう';
+    return '高く跳んで光の柱を探し、煙突から届けよう（' + run.target + '/' + run.targets.length + '）';
+  }
+
+  function finish() {
+    sndClear();
+    const r = bestAfter(best, run.time);
+    best = r.best;
+    if (r.isNew) saveBest(best);
+    setObjective('');
+    setPrompt(null);
+    setTimeout(() => {
+      showClear(run.time, best, r.isNew);
+      if (document.exitPointerLock) document.exitPointerLock();
+    }, 900);
+  }
+
+  document.getElementById('againBtn').addEventListener('click', () => {
+    run = newRun(targets);
+    placeAt(santa, COURSE.start);
+    clearThrown(sm);
+    hideClear();
+    setObjective(objectiveText());
+    if (!INPUT.touch) lockPointer(renderer.domElement);
+  });
   initInput(renderer.domElement);
 
   addEventListener('resize', () => {
@@ -32,7 +64,7 @@
     started = true;
     title.classList.add('off');
     sndInit();
-    setObjective('そりでプレゼントを受け取ろう');
+    setObjective(objectiveText());
     const cv = renderer.domElement;
     if (!INPUT.touch) lockPointer(cv);
   });
@@ -46,7 +78,7 @@
       const l = takeLook();
       camLook(l.x, l.y);
       const bx = santa.pos.x, bz = santa.pos.z;
-      const playing = run.state === 'play';
+      const playing = run.state === 'play' && !run.cleared;
       const mv = playing ? readMove() : { x: 0, z: 0 };
       mv.jump = takeJump() && playing;
       const act = takeAct();
@@ -65,11 +97,29 @@
         walked += Math.hypot(santa.pos.x - bx, santa.pos.z - bz);
         if (walked > 1.1) { walked = 0; sndStep(); }
       }
-      // プレゼント：受け取る・落とす・やり直し・向こう岸（向こう岸は Phase 4 で配達に置き換える）
-      if (act && tryPickup(run, santa, COURSE.sleigh)) {
-        sndPickup();
-        showToast('プレゼントを受け取った！', 1.6);
-        setObjective('プレゼントを持って、川の向こう岸へ');
+      // プレゼント：受け取る・届ける・落とす・やり直し
+      if (act) {
+        if (tryPickup(run, santa, COURSE.sleigh)) {
+          sndPickup();
+          showToast('プレゼントを受け取った！', 1.6);
+          setObjective(objectiveText());
+        } else {
+          const ch = run.targets[run.target];
+          const res = tryDeliver(run, santa, chimneys);
+          if (res === 'wrong') {
+            sndWrong();
+            showToast('この家じゃない！', 1.2);
+          } else if (res === 'delivered' || res === 'cleared') {
+            sendDown(sm, ch);
+            sndDeliver();
+            if (res === 'delivered') {
+              showToast('配達完了！ ' + run.target + '/' + run.targets.length, 1.8);
+              setObjective(objectiveText());
+            } else {
+              finish();
+            }
+          }
+        }
       }
       const ev = stepRun(run, santa, dt, COURSE.respawn);
       if (ev === 'dropped') {
@@ -78,19 +128,24 @@
         showToast('プレゼントを落とした！', CFG.dropDelay);
       } else if (ev === 'respawn') {
         clearThrown(sm);
-        showToast('そりからやり直し', 1.4);
+        showToast(run.target === 0 ? 'そりからやり直し' : '届けた家の前からやり直し', 1.4);
       }
-      if (checkCrossed(run, santa)) {
-        showToast('向こう岸に着いた！', 2.2);
-        setObjective('向こう岸に着いた！（配達は次の段階で作ります）');
-      }
+      tickTime(run, dt);
+      setTimer(run.time);
+      const goal = run.targets[run.target];
       const canPick = !run.carrying && run.state === 'play' && nearPickup(santa, COURSE.sleigh);
-      setPrompt(canPick ? (INPUT.touch ? '「受け取る」ボタンで受け取る' : 'E で受け取る') : null);
+      const canGive = run.carrying && run.state === 'play' && goal && onChimney(santa, goal);
+      setPrompt(canPick ? (INPUT.touch ? '「受け取る」ボタンで受け取る' : 'E で受け取る')
+              : canGive ? (INPUT.touch ? '「届ける」ボタンで届ける' : 'E で届ける') : null);
+      const ab = document.getElementById('actBtn'), abText = run.carrying ? '届ける' : '受け取る';
+      if (ab.textContent !== abText) ab.textContent = abText;
       sm.carrying = run.carrying;
     }
     updateSantaMesh(sm, santa, dt, t);
     updateThrown(sm, dt);
     updateHud(dt);
+    updateBeacon(beacon, run.cleared ? null : run.targets[run.target], santa, dt, t);
+    updateFx(dt);
     updateMarker(mk, santa, t);
     updateCamera(santa, dt);
     updateSnow(santa.pos, dt, t);
@@ -100,5 +155,5 @@
   requestAnimationFrame(frame);
 
   // 画面確認用（コンソールから位置やカメラを動かせる）
-  window.GAME = { santa, run, sm, CAM, PHYS, W, renderer, camera };
+  window.GAME = { santa, get run() { return run; }, sm, CAM, PHYS, W, renderer, camera };
 })();
