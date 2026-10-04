@@ -626,6 +626,95 @@ test('newCar: at を渡すとその位置から、z1 の向きへ走り出す', 
   near(c.z, 25, 1e-9);
 });
 
+// ===== 動き出す列車 =====
+function trainFor() { return newTrain([0, 19.5], 0, 18, 3.2, -2.5, 4.5, 39); }   // 屋根は y=2
+
+test('列車: 屋根に乗っていなければ動かない', () => {
+  const tr = trainFor(), s = newSanta(0, 10); s.onGround = true;
+  for (let i = 0; i < 60; i++) updateTrain(tr, s, 1 / 60);
+  eq(tr.speed, 0);
+  eq(tr.cars[0].x, 0);
+});
+
+test('列車: 屋根に乗って trainDelay 秒たつと走り出し、サンタもいっしょに運ぶ', () => {
+  const tr = trainFor(), s = newSanta(0, 0); s.pos.y = 2; s.onGround = true;
+  let started = 0;
+  for (let i = 0; i < 90; i++) if (updateTrain(tr, s, 1 / 60) === 'start') started++;
+  eq(started, 1, '走り出した瞬間は 1 回');
+  eq(tr.speed > 0, true);
+  near(s.pos.x, tr.cars[0].x, 1e-9, 'サンタと車両が同じだけ動く');
+});
+
+test('列車: 降りると止まる', () => {
+  const tr = trainFor(), s = newSanta(0, 0); s.pos.y = 2; s.onGround = true;
+  for (let i = 0; i < 120; i++) updateTrain(tr, s, 1 / 60);
+  s.onGround = false;
+  for (let i = 0; i < 180; i++) updateTrain(tr, s, 1 / 60);
+  eq(tr.speed, 0);
+});
+
+test('列車: 端を越えた車両は反対側へ回る', () => {
+  const tr = newTrain([19], 0, 18, 3.2, -2.5, 4.5, 39);
+  shiftTrain(tr, 1);   // 20 > 19.5 → 20 - 39 = -19
+  eq(tr.cars[0].x, -19);
+  near(tr.cars[0].box.minX, -28, 1e-9);
+});
+
+// ===== 逃げる家 =====
+function runawayFor() {
+  const boxes = [makeBox(0, 0, 0, 9, 4.5, 8), makeBox(0, 4.5, 0, 9.8, 1, 8.8)];   // 壁と屋根（屋根の上は y=5.5）
+  const ch = { x: 2, y: 8, z: 1, base: 4.5, front: { x: 0, z: 6.5 } };
+  return newRunaway(0, 0, boxes, ch, { x0: -20, x1: 20, z0: -20, z1: 20 });
+}
+function groundAt(x, z) { const s = newSanta(x, z); s.onGround = true; return s; }
+
+test('逃げる家: 遠ければ動かない', () => {
+  const h = runawayFor();
+  eq(stepRunaway(h, groundAt(30, 0), 0.5, true), null);
+  eq(h.x, 0);
+});
+
+test('逃げる家: 地上で近づくと離れる向きに逃げ、箱・煙突・家の前もいっしょに動く', () => {
+  const h = runawayFor();
+  eq(stepRunaway(h, groundAt(-8, 0), 0.5, true), 'flee');
+  const m = CFG.fleeSpeed * 0.5;
+  near(h.x, m, 1e-9);
+  near(h.boxes[0].minX, -4.5 + m, 1e-9);
+  near(h.chimney.x, 2 + m, 1e-9);
+  near(h.chimney.front.x, m, 1e-9);
+  eq(h.fleeing, true);
+});
+
+test('逃げる家: 範囲の端で止まる', () => {
+  const h = runawayFor();
+  moveRunaway(h, 19.9, 0);
+  stepRunaway(h, groundAt(12, 0), 0.5, true);
+  near(h.x, 20, 1e-9);
+});
+
+test('逃げる家: 空中のサンタからは逃げない', () => {
+  const h = runawayFor(), s = newSanta(-6, 0);
+  s.pos.y = 8; s.onGround = false;
+  eq(stepRunaway(h, s, 0.5, true), null);
+  eq(h.x, 0);
+});
+
+test('逃げる家: 屋根に乗るとつかまえて、それ以上逃げない', () => {
+  const h = runawayFor(), s = newSanta(0, 0);
+  s.pos.y = 5.5; s.onGround = true;
+  eq(stepRunaway(h, s, 1 / 60, true), 'caught');
+  eq(stepRunaway(h, groundAt(-6, 0), 0.5, true), null);
+  eq(h.x, 0);
+});
+
+test('逃げる家: 配達先でなければ（active でない）逃げない。resetRunaway で元の場所へ', () => {
+  const h = runawayFor();
+  eq(stepRunaway(h, groundAt(-6, 0), 0.5, false), null);
+  stepRunaway(h, groundAt(-6, 0), 0.5, true);
+  resetRunaway(h);
+  eq([h.x, h.z, h.chimney.x, h.caught], [0, 0, 2, false]);
+});
+
 // ===== 結果表示 =====
 (function () {
   const out = document.getElementById('out');

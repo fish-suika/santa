@@ -77,3 +77,88 @@ function updateCar(c, s, dt) {
   s.onGround = false;
   return 'hit';
 }
+
+// ===== 理不尽ギミック：動き出す列車・逃げる家 =====
+
+// 足元のすぐ下が boxes のどれかに乗っているか
+function standingOn(s, boxes) {
+  if (!s.onGround) return false;
+  const me = bodyBox({ x: s.pos.x, y: s.pos.y - 0.02, z: s.pos.z });
+  return boxes.some(b => overlaps(me, b));
+}
+
+// 掘割の底に止まっている列車。xs は車両の中心、len は車両の長さ、y0 は底、h は高さ。
+// span ごとに x が一周する（x が span/2 を越えた車両は反対側へ回る）
+function newTrain(xs, zc, len, w, y0, h, span) {
+  return { cars: xs.map(x => ({ x, box: makeBox(x, y0, zc, len, h, w) })), span, speed: 0, ride: 0 };
+}
+
+function setBoxX(b, x) {
+  const hw = (b.maxX - b.minX) / 2;
+  b.minX = x - hw;
+  b.maxX = x + hw;
+}
+
+// 列車全体を +X へ dx 動かす
+function shiftTrain(tr, dx) {
+  for (const c of tr.cars) {
+    c.x += dx;
+    if (c.x > tr.span / 2) c.x -= tr.span;
+    setBoxX(c.box, c.x);
+  }
+}
+
+// 列車を動かす。サンタが屋根に乗って trainDelay 秒たつと走り出し（trainSpeed まで加速）、降りると止まる。
+// 乗っていればサンタもいっしょに運ぶ。返り値: 'start'（走り出した瞬間）／'ride'（乗っている）／null
+function updateTrain(tr, s, dt) {
+  const riding = standingOn(s, tr.cars.map(c => c.box));
+  tr.ride = riding ? tr.ride + dt : 0;
+  const want = riding && tr.ride >= CFG.trainDelay ? CFG.trainSpeed : 0;
+  const was = tr.speed;
+  tr.speed = want > tr.speed ? Math.min(want, tr.speed + CFG.trainAccel * dt)
+                             : Math.max(want, tr.speed - CFG.trainAccel * dt);
+  const dx = tr.speed * dt;
+  if (dx) shiftTrain(tr, dx);
+  if (riding) s.pos.x += dx;
+  if (was === 0 && tr.speed > 0) return 'start';
+  return riding ? 'ride' : null;
+}
+
+// 逃げる家。boxes はその家の当たり判定の箱すべて、chimney は W.houses の煙突（front も含めていっしょに動かす）
+function newRunaway(x, z, boxes, chimney, bounds) {
+  return { x, z, x0: x, z0: z, boxes, chimney, bounds, caught: false, fleeing: false };
+}
+
+function moveRunaway(h, mx, mz) {
+  h.x += mx;
+  h.z += mz;
+  for (const b of h.boxes) { b.minX += mx; b.maxX += mx; b.minZ += mz; b.maxZ += mz; }
+  h.chimney.x += mx;
+  h.chimney.z += mz;
+  h.chimney.front.x += mx;
+  h.chimney.front.z += mz;
+}
+
+// 家を逃がす。active（その家がいまの配達先）で、地上のサンタが fleeRange 以内なら、離れる向きに fleeSpeed で逃げる。
+// 空中のサンタからは逃げない（上は見ていない）。屋根に乗られたら caught。返り値: 'flee'／'caught'（つかまった瞬間）／null
+function stepRunaway(h, s, dt, active) {
+  h.fleeing = false;
+  if (h.caught || !active) return null;
+  if (standingOn(s, h.boxes)) { h.caught = true; return 'caught'; }
+  if (!s.onGround) return null;
+  const dx = h.x - s.pos.x, dz = h.z - s.pos.z, d = Math.hypot(dx, dz);
+  if (d > CFG.fleeRange || d < 1e-6) return null;
+  const B = h.bounds, step = CFG.fleeSpeed * dt;
+  const nx = Math.min(B.x1, Math.max(B.x0, h.x + dx / d * step));
+  const nz = Math.min(B.z1, Math.max(B.z0, h.z + dz / d * step));
+  moveRunaway(h, nx - h.x, nz - h.z);
+  h.fleeing = true;
+  return 'flee';
+}
+
+// 「もう一度」のとき、元の場所に戻す
+function resetRunaway(h) {
+  moveRunaway(h, h.x0 - h.x, h.z0 - h.z);
+  h.caught = false;
+  h.fleeing = false;
+}
