@@ -402,3 +402,34 @@ function updateSnow(center, dt, t) {
   }
   a.needsUpdate = true;
 }
+
+// 動かない部品（W.scene 直下の Mesh）を、材質ごとに 1 つのメッシュにまとめる。描画回数が減り、スマホでも軽くなる。
+// skip に入れた物と、Group の中身（車・列車・電線・サンタ）はまとめない。これより後に作った物（影・目印・光の柱など）も対象外
+function mergeStatic(skip) {
+  const byMat = new Map();
+  for (const m of W.scene.children.slice()) {
+    if (!m.isMesh || skip.has(m)) continue;
+    m.updateMatrixWorld(true);
+    const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+    g.applyMatrix4(m.matrixWorld);
+    if (!byMat.has(m.material)) byMat.set(m.material, []);
+    byMat.get(m.material).push(g);
+    W.scene.remove(m);
+  }
+  for (const [material, geos] of byMat) {
+    let n = 0;
+    for (const g of geos) n += g.attributes.position.count;
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+    let o = 0;
+    for (const g of geos) {
+      pos.set(g.attributes.position.array, o * 3);
+      nor.set(g.attributes.normal.array, o * 3);
+      o += g.attributes.position.count;
+      g.dispose();
+    }
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    W.scene.add(new THREE.Mesh(merged, material));
+  }
+}

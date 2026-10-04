@@ -11,6 +11,7 @@
   buildCars();
   buildTrain();
   buildRunaway();
+  mergeStatic(new Set([...HZ.runaway.meshes, ...HZ.runaway.legs]));   // 逃げる家とその脚は動くのでまとめない
   makeSnow();
   const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 400);
   CAM.cam = camera;
