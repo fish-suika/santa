@@ -53,8 +53,9 @@ const CFG = {
   touchSens: 0.006,     // タッチ 1px あたりの回転（ラジアン）
 
   // 空中のカメラ（着地点が画面に入るように）
-  camAirDrop: 0.45,     // 地面からの高さのこの割合だけ、注視点を下げる
-  camAirPitch: 0.5,     // 最高点で見下ろし角にこれだけ足す（ラジアン。高さに比例）
+  camAirDrop: 0.5,      // 地面からの高さのこの割合だけ、注視点を下げる
+  camAirPitch: 0.15,    // 最高点で見下ろし角にこれだけ足す（ラジアン。高さに比例）
+  camAirBack: 0.6,      // 地面からの高さ 1m につき、カメラをこれだけ後ろへ引く（サンタと着地点を両方画面に入れる）
 };
 // ===== 当たり判定（three.js に依存しない。verify から直接試す） =====
 // 箱は {minX,maxX,minY,maxY,minZ,maxZ}。街の当たり判定はすべてこの箱で表す。
@@ -240,10 +241,11 @@ function santaStep(s, input, yaw, dt, boxes) {
 
 // カメラを置く場所。target から yaw の後ろ・pitch の高さへ camDist 離す。
 // 間に箱があれば、その 0.3m 手前まで寄せる（ただし camMinDist より近づけない）。
-function cameraPlace(target, yaw, pitch, boxes) {
+// want を渡すと camDist の代わりにその距離を目指す（空中で引くとき）。
+function cameraPlace(target, yaw, pitch, boxes, want) {
   const cp = Math.cos(pitch);
   const dir = { x: Math.sin(yaw) * cp, y: Math.sin(pitch), z: Math.cos(yaw) * cp };
-  let dist = CFG.camDist;
+  let dist = want || CFG.camDist;
   for (const b of boxes) {
     if (b.noCam) continue;
     const t = rayBox(target, dir, b);

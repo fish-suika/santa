@@ -59,10 +59,11 @@ function santaStep(s, input, yaw, dt, boxes) {
 
 // カメラを置く場所。target から yaw の後ろ・pitch の高さへ camDist 離す。
 // 間に箱があれば、その 0.3m 手前まで寄せる（ただし camMinDist より近づけない）。
-function cameraPlace(target, yaw, pitch, boxes) {
+// want を渡すと camDist の代わりにその距離を目指す（空中で引くとき）。
+function cameraPlace(target, yaw, pitch, boxes, want) {
   const cp = Math.cos(pitch);
   const dir = { x: Math.sin(yaw) * cp, y: Math.sin(pitch), z: Math.cos(yaw) * cp };
-  let dist = CFG.camDist;
+  let dist = want || CFG.camDist;
   for (const b of boxes) {
     if (b.noCam) continue;
     const t = rayBox(target, dir, b);

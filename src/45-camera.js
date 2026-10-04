@@ -8,7 +8,7 @@ function camLook(dx, dy) {
 }
 
 function updateCamera(s, dt) {
-  // 空中では注視点を下げ、見下ろし角を足して、真下の着地点が画面に入るようにする
+  // 空中では注視点を下げ、カメラを後ろへ引いて、サンタと真下の着地点が両方画面に入るようにする
   const gy = groundBelow(s.pos, PHYS.boxes);
   const h = s.onGround || !isFinite(gy) ? 0 : Math.max(0, s.pos.y - gy);
   const wantY = s.pos.y + CFG.camLookHeight - h * CFG.camAirDrop;
@@ -19,7 +19,7 @@ function updateCamera(s, dt) {
   const pitch = Math.min(1.45, CAM.pitch + CAM.tp);
 
   const target = { x: s.pos.x, y: CAM.ty, z: s.pos.z };
-  const p = cameraPlace(target, CAM.yaw, pitch, PHYS.boxes);
+  const p = cameraPlace(target, CAM.yaw, pitch, PHYS.boxes, CFG.camDist + h * CFG.camAirBack);
   // 壁に寄るときはすぐ、離れるときはゆっくり戻す（カメラがガクガクしないように）
   CAM.dist = p.dist < CAM.dist ? p.dist : CAM.dist + (p.dist - CAM.dist) * Math.min(1, dt * 5);
   const d = p.dir;
