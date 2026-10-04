@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>サンタ、ちゃんと届けて</title>
+<title>ハイジャンプ・デリバリー</title>
 <style>
   :root{
     --ink:#fff8ee;
@@ -21,6 +21,7 @@
     gap:18px;padding:16px;text-align:center;cursor:pointer;background:rgba(8,14,36,.55)}
   #title h1{font-size:clamp(28px,6vw,56px);letter-spacing:.08em;text-shadow:0 2px 18px rgba(0,0,0,.6)}
   #title h1 span{color:var(--red)}
+  #title h1 span,#title h1 b{display:inline-block;font-weight:inherit}   /* 折り返すなら「・」のところで */
   #title p{font-size:clamp(14px,2.4vw,18px);color:var(--gold);letter-spacing:.2em}
   #title small{font-size:13px;opacity:.75;line-height:1.8}
   #title.off{display:none}
@@ -90,7 +91,7 @@
 <body>
 <div id="rotate"><div class="phone"></div><p>横画面にしてください<small>スマホを横向きにすると遊べます</small></p></div>
 <div id="title">
-  <h1>サンタ、<span>ちゃんと</span>届けて</h1>
+  <h1><span>ハイジャンプ</span><b>・デリバリー</b></h1>
   <p>クリック / タップで はじめる</p>
   <small>WASD 移動 ・ Space ジャンプ ・ E 受け取る・届ける ・ マウス 視点<br>スマホ：左で移動 ・ 右で視点 ・ 右下のボタン</small>
 </div>
