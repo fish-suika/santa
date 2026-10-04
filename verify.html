@@ -191,15 +191,20 @@ function moveAxisH(body, ax, d, boxes) {
   body.vel[ax] = 0;
 }
 
-// 縦に d だけ動かす。下向きなら一番高い面に乗り、上向きなら頭を一番低い面で止める。
+// 縦に d だけ動かす。下向きなら、動く前に足元より下にあった面のうち一番高い面に乗る
+// （横から箱にめり込んだときに、その箱のてっぺんへ持ち上げられないように）。上向きなら頭を一番低い面で止める。
 function moveAxisY(body, d, boxes) {
   if (d === 0) return;
-  const p = body.pos;
+  const p = body.pos, prev = p.y;
   p.y += d;
   const hits = hitAll(p, boxes);
   if (!hits.length) return;
-  p.y = d < 0 ? Math.max(...hits.map(b => b.maxY))
-              : Math.min(...hits.map(b => b.minY)) - CFG.santaHeight - EPS;
+  if (d < 0) {
+    const below = hits.filter(b => b.maxY <= prev + 2 * EPS);
+    p.y = below.length ? Math.max(...below.map(b => b.maxY)) : prev;
+  } else {
+    p.y = Math.min(...hits.map(b => b.minY)) - CFG.santaHeight - EPS;
+  }
   body.vel.y = 0;
 }
 
@@ -472,12 +477,13 @@ function moveCar(c, dt) {
 }
 
 // 車を動かし、サンタとの関わりを返す。'ride'（屋根の上にいて、いっしょに動いた）／'hit'（はねられた）／null
-function updateCar(c, s, dt) {
+// boxes を渡すと、運ぶときに壁などで止まる（渡さなければ位置をそのままずらす）
+function updateCar(c, s, dt, boxes) {
   const roof = c.boxes[1], me0 = bodyBox(s.pos);
   const riding = s.onGround && Math.abs(s.pos.y - roof.maxY) < 0.05 &&
     me0.maxX > roof.minX && me0.minX < roof.maxX && me0.maxZ > roof.minZ && me0.minZ < roof.maxZ;
   const dz = moveCar(c, dt);
-  if (riding) { s.pos.z += dz; return 'ride'; }
+  if (riding) { carry(s, 'z', dz, boxes); return 'ride'; }
   const me = bodyBox(s.pos);
   if (!c.boxes.some(b => overlaps(me, b))) return null;
   // ほぼ屋根の高さから来たなら、屋根に乗せるだけ
@@ -508,7 +514,7 @@ function standingOn(s, boxes) {
 // 掘割の底に止まっている列車。xs は車両の中心、len は車両の長さ、y0 は底、h は高さ。
 // span ごとに x が一周する（x が span/2 を越えた車両は反対側へ回る）
 function newTrain(xs, zc, len, w, y0, h, span) {
-  return { cars: xs.map(x => ({ x, box: makeBox(x, y0, zc, len, h, w) })), span, speed: 0, ride: 0 };
+  return { cars: xs.map(x => ({ x, box: makeBox(x, y0, zc, len, h, w) })), span, zc, w, speed: 0, ride: 0 };
 }
 
 function setBoxX(b, x) {
@@ -527,8 +533,9 @@ function shiftTrain(tr, dx) {
 }
 
 // 列車を動かす。サンタが屋根に乗って trainDelay 秒たつと走り出し（trainSpeed まで加速）、降りると止まる。
-// 乗っていればサンタもいっしょに運ぶ。返り値: 'start'（走り出した瞬間）／'ride'（乗っている）／null
-function updateTrain(tr, s, dt) {
+// 乗っていればサンタもいっしょに運ぶ。返り値: 'start'（走り出した瞬間）／'ride'（乗っている）／'scraped'（トンネルの入口にぶつかって落ちた）／null
+// boxes を渡すと、運ぶときに壁で止まる（街の端で止められたら、トンネルの入口にぶつかったことにして線路へはじき出す）
+function updateTrain(tr, s, dt, boxes) {
   const riding = standingOn(s, tr.cars.map(c => c.box));
   tr.ride = riding ? tr.ride + dt : 0;
   const want = riding && tr.ride >= CFG.trainDelay ? CFG.trainSpeed : 0;
@@ -537,7 +544,12 @@ function updateTrain(tr, s, dt) {
                              : Math.max(want, tr.speed - CFG.trainAccel * dt);
   const dx = tr.speed * dt;
   if (dx) shiftTrain(tr, dx);
-  if (riding) s.pos.x += dx;
+  if (riding) {
+    const x0 = s.pos.x;
+    carry(s, 'x', dx, boxes);
+    // 街の端（トンネルの入口）で止められた：入口にぶつかって、列車の横から線路へ落ちる
+    if (dx > 0 && s.pos.x < x0 + dx - 1e-6) { knockOffTrain(s, tr); return 'scraped'; }
+  }
   if (was === 0 && tr.speed > 0) return 'start';
   return riding ? 'ride' : null;
 }
@@ -579,6 +591,21 @@ function resetRunaway(h) {
   moveRunaway(h, h.x0 - h.x, h.z0 - h.z);
   h.caught = false;
   h.fleeing = false;
+}
+
+// 乗り物がサンタを ax 方向に d 運ぶ。boxes があれば通常の横移動と同じく壁で止まる。
+// 位置を直接ずらすと見えない壁などにめり込むため（めり込んだまま落ちる処理が走ると、壁のてっぺんに持ち上げられていた）
+function carry(s, ax, d, boxes) {
+  if (boxes) moveAxisH(s, ax, d, boxes);
+  else s.pos[ax] += d;
+}
+
+// トンネルの入口にぶつかったサンタを、列車の横（線路の上）へはじき出す。そのまま線路に落ちる
+function knockOffTrain(s, tr) {
+  s.pos.z = tr.zc + tr.w / 2 + CFG.santaHalf + 0.2;
+  s.vel = { x: -2, y: 4, z: 2 };
+  s.onGround = false;
+  tr.ride = 0;
 }
 // ===== 検証ハーネス =====
 const __results = [];
@@ -1240,6 +1267,30 @@ test('列車: 端を越えた車両は反対側へ回る', () => {
   shiftTrain(tr, 1);   // 20 > 19.5 → 20 - 39 = -19
   eq(tr.cars[0].x, -19);
   near(tr.cars[0].box.minX, -28, 1e-9);
+});
+
+test('列車: 乗ったまま街の端まで運ばれると、トンネルの入口にぶつかって列車の横から落ちる（壁の上に持ち上げられない）', () => {
+  const tr = newTrain([0], 0, 18, 3.2, -2.5, 4.5, 200);
+  const wall = makeBox(6, -10, 0, 2, 220, 10);   // x = 5〜7 の高い壁（街の端の代わり）
+  const s = newSanta(0, 0); s.pos.y = 2; s.onGround = true;
+  let top = 0, scraped = 0;
+  for (let i = 0; i < 600; i++) {
+    const boxes = [tr.cars[0].box, wall];
+    if (updateTrain(tr, s, 1 / 60, boxes) === 'scraped') scraped++;
+    santaStep(s, STOP, 0, 1 / 60, boxes);
+    top = Math.max(top, s.pos.y);
+    if (s.pos.y < -5) break;
+  }
+  eq(scraped, 1, 'ぶつかったのは 1 回');
+  eq(top < 3, true, '持ち上げられない。最高 ' + top.toFixed(1));
+  eq(s.pos.z > 1.6, true, '列車の横へはじき出された');
+  eq(s.pos.y < -5, true, '線路へ落ちた');
+});
+
+test('moveBody: 横から箱にめり込んでいても、その箱のてっぺんへ持ち上げられない', () => {
+  const b = { pos: { x: 0, y: 2, z: 0 }, vel: { x: 0, y: 0, z: 0 }, onGround: false };
+  moveBody(b, 1 / 60, [makeBox(0, -10, 0, 2, 220, 2)]);
+  eq(b.pos.y < 3, true, 'y=' + b.pos.y.toFixed(1));
 });
 
 // ===== 逃げる家 =====

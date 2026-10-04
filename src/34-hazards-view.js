@@ -76,6 +76,15 @@ function buildTrain() {
     c.group = g;
   }
   HZ.train = tr;
+
+  // 街の両端（x = ±41〜）の線路はトンネル。列車は片方のトンネルに入り、反対側から出てくる（見た目だけ。街の外なので触れない）
+  const BX = COURSE.bounds.x + 1, d = Math.abs(RL.z1 - RL.z0);
+  for (const sd of [1, -1]) {
+    deco(new THREE.BoxGeometry(60, 16, d), mat(0x55586a), sd * (BX + 30), -2.5 + 8, zc);                // トンネルの山（線路を覆う）
+    deco(new THREE.BoxGeometry(60, 0.3, d), mat(COL.snow), sd * (BX + 30), 13.65, zc);                   // 山の上の雪
+    const hole = deco(new THREE.PlaneGeometry(TR.w + 0.8, TR.h + 0.4), mat(0x05060a), sd * (BX - 0.02), -2.5 + (TR.h + 0.4) / 2, zc);
+    hole.rotation.y = sd > 0 ? -Math.PI / 2 : Math.PI / 2;                                              // 入口の暗がり（街の側を向く）
+  }
 }
 
 // 逃げる家（3 軒目）。house() を呼んで、そのとき増えたメッシュと当たり判定の箱を捕まえ、いっしょに動かす

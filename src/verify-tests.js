@@ -660,6 +660,30 @@ test('列車: 端を越えた車両は反対側へ回る', () => {
   near(tr.cars[0].box.minX, -28, 1e-9);
 });
 
+test('列車: 乗ったまま街の端まで運ばれると、トンネルの入口にぶつかって列車の横から落ちる（壁の上に持ち上げられない）', () => {
+  const tr = newTrain([0], 0, 18, 3.2, -2.5, 4.5, 200);
+  const wall = makeBox(6, -10, 0, 2, 220, 10);   // x = 5〜7 の高い壁（街の端の代わり）
+  const s = newSanta(0, 0); s.pos.y = 2; s.onGround = true;
+  let top = 0, scraped = 0;
+  for (let i = 0; i < 600; i++) {
+    const boxes = [tr.cars[0].box, wall];
+    if (updateTrain(tr, s, 1 / 60, boxes) === 'scraped') scraped++;
+    santaStep(s, STOP, 0, 1 / 60, boxes);
+    top = Math.max(top, s.pos.y);
+    if (s.pos.y < -5) break;
+  }
+  eq(scraped, 1, 'ぶつかったのは 1 回');
+  eq(top < 3, true, '持ち上げられない。最高 ' + top.toFixed(1));
+  eq(s.pos.z > 1.6, true, '列車の横へはじき出された');
+  eq(s.pos.y < -5, true, '線路へ落ちた');
+});
+
+test('moveBody: 横から箱にめり込んでいても、その箱のてっぺんへ持ち上げられない', () => {
+  const b = { pos: { x: 0, y: 2, z: 0 }, vel: { x: 0, y: 0, z: 0 }, onGround: false };
+  moveBody(b, 1 / 60, [makeBox(0, -10, 0, 2, 220, 2)]);
+  eq(b.pos.y < 3, true, 'y=' + b.pos.y.toFixed(1));
+});
+
 // ===== 逃げる家 =====
 function runawayFor() {
   const boxes = [makeBox(0, 0, 0, 9, 4.5, 8), makeBox(0, 4.5, 0, 9.8, 1, 8.8)];   // 壁と屋根（屋根の上は y=5.5）

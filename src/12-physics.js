@@ -73,15 +73,20 @@ function moveAxisH(body, ax, d, boxes) {
   body.vel[ax] = 0;
 }
 
-// 縦に d だけ動かす。下向きなら一番高い面に乗り、上向きなら頭を一番低い面で止める。
+// 縦に d だけ動かす。下向きなら、動く前に足元より下にあった面のうち一番高い面に乗る
+// （横から箱にめり込んだときに、その箱のてっぺんへ持ち上げられないように）。上向きなら頭を一番低い面で止める。
 function moveAxisY(body, d, boxes) {
   if (d === 0) return;
-  const p = body.pos;
+  const p = body.pos, prev = p.y;
   p.y += d;
   const hits = hitAll(p, boxes);
   if (!hits.length) return;
-  p.y = d < 0 ? Math.max(...hits.map(b => b.maxY))
-              : Math.min(...hits.map(b => b.minY)) - CFG.santaHeight - EPS;
+  if (d < 0) {
+    const below = hits.filter(b => b.maxY <= prev + 2 * EPS);
+    p.y = below.length ? Math.max(...below.map(b => b.maxY)) : prev;
+  } else {
+    p.y = Math.min(...hits.map(b => b.minY)) - CFG.santaHeight - EPS;
+  }
   body.vel.y = 0;
 }
 

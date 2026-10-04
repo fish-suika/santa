@@ -89,7 +89,7 @@
       mv.jump = takeJump() && playing;
       const act = takeAct();
       for (const c of HZ.cars) {
-        if (updateCar(c, santa, dt) !== 'hit') continue;
+        if (updateCar(c, santa, dt, PHYS.boxes) !== 'hit') continue;
         sndHonk();
         if (dropPresent(run)) {
           throwPresent(sm);
@@ -100,9 +100,19 @@
         }
       }
       // 理不尽ギミック：動き出す列車・逃げる家
-      if (updateTrain(HZ.train, santa, dt) === 'start') {
+      const trRes = updateTrain(HZ.train, santa, dt, PHYS.boxes);
+      if (trRes === 'start') {
         sndWhistle();
         showToast('列車が動き出した！？', 1.6);
+      } else if (trRes === 'scraped') {
+        sndLand(1);
+        if (dropPresent(run)) {
+          throwPresent(sm);
+          sndDrop();
+          showToast('トンネルにぶつかって、プレゼントを落とした！', CFG.dropDelay);
+        } else {
+          showToast('トンネルにぶつかった！', 1.2);
+        }
       }
       const ra = HZ.runaway, raRes = stepRunaway(ra, santa, dt, run.state === 'play' && run.target === ra.target);
       if (raRes === 'flee' && !ra.noticed) {
