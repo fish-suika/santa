@@ -59,19 +59,21 @@ function stepRun(run, s, dt, respawn) {
 }
 
 
-// 煙突 ch の上に立っているか（縁に体が少しでも乗っていて、足元の高さが煙突の上面）
-function onChimney(s, ch) {
-  const r = CFG.chimneyHalf + CFG.santaHalf;
-  return s.onGround && Math.abs(s.pos.y - ch.y) < 0.05 && Math.abs(s.pos.x - ch.x) < r && Math.abs(s.pos.z - ch.z) < r;
+// 煙突 ch の近くにいて届けられるか。横 deliverRange 以内で、足元が軒（ch.base）より上。
+// 屋根の上に立っていても、煙突の上を飛んでいる途中でもよい（煙突の上に乗るのは難しすぎたため）
+function nearChimney(s, ch) {
+  return Math.hypot(s.pos.x - ch.x, s.pos.z - ch.z) <= CFG.deliverRange && s.pos.y >= ch.base;
 }
 
 // E を押したとき。chimneys は街のすべての煙突。
 // 返り値: 'delivered'（届けた）／'cleared'（最後の 1 軒を届けた）／'wrong'（ほかの家の煙突）／null（何も起きない）
 function tryDeliver(run, s, chimneys) {
   if (run.state !== 'play' || !run.carrying || run.cleared) return null;
-  const ch = chimneys.find(c => onChimney(s, c));
+  // 配達先の煙突が近ければそちらを優先（隣の家の煙突も近いときに wrong にしない）
+  const goal = run.targets[run.target];
+  const ch = goal && nearChimney(s, goal) ? goal : chimneys.find(c => nearChimney(s, c));
   if (!ch) return null;
-  if (ch !== run.targets[run.target]) return 'wrong';
+  if (ch !== goal) return 'wrong';
   run.target++;
   run.respawn = ch.front;
   if (run.target >= run.targets.length) {

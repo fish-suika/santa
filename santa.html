@@ -134,7 +134,7 @@ const CFG = {
   dropDelay: 1.4,       // 落としてから、受け取り地点で再開するまでの秒数
 
   // 配達
-  chimneyHalf: 0.55,    // 煙突の上面（縁）の幅の半分
+  deliverRange: 3,      // 煙突から横にこの距離以内で、軒より上にいれば届けられる（屋根の上でも空中でも）
   beaconMinY: 10,       // 足元がこの高さ以上のときだけ、配達先の光の柱が見える
 
   // カメラ（サンタの後ろ）
@@ -420,19 +420,21 @@ function stepRun(run, s, dt, respawn) {
 }
 
 
-// 煙突 ch の上に立っているか（縁に体が少しでも乗っていて、足元の高さが煙突の上面）
-function onChimney(s, ch) {
-  const r = CFG.chimneyHalf + CFG.santaHalf;
-  return s.onGround && Math.abs(s.pos.y - ch.y) < 0.05 && Math.abs(s.pos.x - ch.x) < r && Math.abs(s.pos.z - ch.z) < r;
+// 煙突 ch の近くにいて届けられるか。横 deliverRange 以内で、足元が軒（ch.base）より上。
+// 屋根の上に立っていても、煙突の上を飛んでいる途中でもよい（煙突の上に乗るのは難しすぎたため）
+function nearChimney(s, ch) {
+  return Math.hypot(s.pos.x - ch.x, s.pos.z - ch.z) <= CFG.deliverRange && s.pos.y >= ch.base;
 }
 
 // E を押したとき。chimneys は街のすべての煙突。
 // 返り値: 'delivered'（届けた）／'cleared'（最後の 1 軒を届けた）／'wrong'（ほかの家の煙突）／null（何も起きない）
 function tryDeliver(run, s, chimneys) {
   if (run.state !== 'play' || !run.carrying || run.cleared) return null;
-  const ch = chimneys.find(c => onChimney(s, c));
+  // 配達先の煙突が近ければそちらを優先（隣の家の煙突も近いときに wrong にしない）
+  const goal = run.targets[run.target];
+  const ch = goal && nearChimney(s, goal) ? goal : chimneys.find(c => nearChimney(s, c));
   if (!ch) return null;
-  if (ch !== run.targets[run.target]) return 'wrong';
+  if (ch !== goal) return 'wrong';
   run.target++;
   run.respawn = ch.front;
   if (run.target >= run.targets.length) {
@@ -671,7 +673,7 @@ function house(cx, cz, w, d, wallH, wallColor) {
   addLights(pts, cols);
 
   W.houses.push({ x: cx, z: cz, w, d, wallH,
-    chimney: { x: chX, y: wallH + chH + 0.2, z: chZ, front: { x: cx, z: cz + d / 2 + 2.5 } } });
+    chimney: { x: chX, y: wallH + chH + 0.2, z: chZ, base: wallH, front: { x: cx, z: cz + d / 2 + 2.5 } } });
 }
 
 // 車。alongX なら X 方向に長い。屋根に乗れる。
@@ -1404,7 +1406,7 @@ function saveBest(v) {
       setTimer(run.time);
       const goal = run.targets[run.target];
       const canPick = !run.carrying && run.state === 'play' && nearPickup(santa, COURSE.sleigh);
-      const canGive = run.carrying && run.state === 'play' && goal && onChimney(santa, goal);
+      const canGive = run.carrying && run.state === 'play' && goal && nearChimney(santa, goal);
       setPrompt(canPick ? (INPUT.touch ? '「受け取る」ボタンで受け取る' : 'E で受け取る')
               : canGive ? (INPUT.touch ? '「届ける」ボタンで届ける' : 'E で届ける') : null);
       const ab = document.getElementById('actBtn'), abText = run.carrying ? '届ける' : '受け取る';

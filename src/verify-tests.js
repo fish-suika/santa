@@ -382,16 +382,28 @@ test('dropPresent: 持っていれば落とす。持っていなければ何も�
 });
 
 // ===== 配達 =====
-function chim(x, y, z) { return { x, y, z, front: { x, z: z + 5 } }; }
+function chim(x, y, z) { return { x, y, z, base: y - 4, front: { x, z: z + 5 } }; }   // base: 軒の高さ
 function standOn(ch) { const s = newSanta(ch.x, ch.z); s.pos.y = ch.y; s.onGround = true; return s; }
 
-test('onChimney: 煙突の上に立っていれば true。横にずれたり空中・低い所なら false', () => {
+test('nearChimney: 煙突の上・横 3m 以内の屋根の上・真上の空中なら true', () => {
   const ch = chim(0, 8, 0);
-  eq(onChimney(standOn(ch), ch), true);
-  const s = standOn(ch); s.pos.x = 1.0; eq(onChimney(s, ch), false, '横に 1m');
-  const s2 = standOn(ch); s2.pos.x = 0.9; eq(onChimney(s2, ch), true, '横に 0.9m（体が縁に乗っている）');
-  const a = standOn(ch); a.onGround = false; eq(onChimney(a, ch), false, '空中');
-  const low = standOn(ch); low.pos.y = 5; eq(onChimney(low, ch), false, '屋根の上（煙突より低い）');
+  eq(nearChimney(standOn(ch), ch), true, '煙突の上');
+  const roof = standOn(ch); roof.pos.x = 2.5; roof.pos.y = 5.5; eq(nearChimney(roof, ch), true, '横 2.5m の屋根の上');
+  const air = standOn(ch); air.pos.y = 20; air.onGround = false; eq(nearChimney(air, ch), true, '真上 12m の空中');
+});
+
+test('nearChimney: 横に 3m より離れている、または軒より低いと false', () => {
+  const ch = chim(0, 8, 0);
+  const far = standOn(ch); far.pos.x = 3.2; eq(nearChimney(far, ch), false, '横 3.2m');
+  const low = standOn(ch); low.pos.y = 3; eq(nearChimney(low, ch), false, '軒（4m）より下＝地面や壁ぎわ');
+});
+
+test('tryDeliver: 配達先と別の家の煙突が両方近いときは、配達先に届ける', () => {
+  const A = chim(0, 8, 0), B = chim(2, 8, 0), r = newRun([A, B]);
+  r.carrying = true;
+  const s = standOn(B); s.pos.x = 1;
+  eq(tryDeliver(r, s, [B, A]), 'delivered');
+  eq(r.target, 1);
 });
 
 test('tryDeliver: プレゼントを持っていなければ何も起きない', () => {

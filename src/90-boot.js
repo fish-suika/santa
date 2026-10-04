@@ -134,7 +134,7 @@
       setTimer(run.time);
       const goal = run.targets[run.target];
       const canPick = !run.carrying && run.state === 'play' && nearPickup(santa, COURSE.sleigh);
-      const canGive = run.carrying && run.state === 'play' && goal && onChimney(santa, goal);
+      const canGive = run.carrying && run.state === 'play' && goal && nearChimney(santa, goal);
       setPrompt(canPick ? (INPUT.touch ? '「受け取る」ボタンで受け取る' : 'E で受け取る')
               : canGive ? (INPUT.touch ? '「届ける」ボタンで届ける' : 'E で届ける') : null);
       const ab = document.getElementById('actBtn'), abText = run.carrying ? '届ける' : '受け取る';
