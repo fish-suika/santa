@@ -7,11 +7,13 @@ cat src/00-head.html \
     src/10-config.js \
     src/12-physics.js \
     src/14-control.js \
+    src/16-run.js \
     src/20-sound.js \
     src/30-world.js \
     src/40-santa.js \
     src/45-camera.js \
     src/50-input.js \
+    src/60-hud.js \
     src/90-boot.js \
     src/99-tail.html > santa.html
 cp santa.html index.html   # GitHub Pages はルートの index.html を配信する
@@ -22,6 +24,7 @@ cat src/verify-head.html \
     src/10-config.js \
     src/12-physics.js \
     src/14-control.js \
+    src/16-run.js \
     src/verify-tests.js \
     src/99-tail.html > verify.html
 

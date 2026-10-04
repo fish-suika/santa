@@ -77,6 +77,10 @@ const CFG = {
   maxFall: 60,          // 落下速度の上限 m/s
   fallY: -1,            // 足元がこれより下がったら「落ちた」（川・穴）
 
+  // プレゼント
+  pickupRange: 2.5,     // そりからこの距離（横）以内なら受け取れる
+  dropDelay: 1.4,       // 落としてから、受け取り地点で再開するまでの秒数
+
   // カメラ（サンタの後ろ）
   camDist: 7,
   camLookHeight: 1.4,   // 足元からどれだけ上を見るか
@@ -98,6 +102,8 @@ const CFG = {
 const COURSE = {
   riverHalf: 7,         // 凍った川の幅の半分（川は z = -7〜+7。幅 14m）
   start: { x: 0, z: 45 },
+  sleigh: { x: 9, z: 44 },     // プレゼントの受け取り地点（そり）
+  respawn: { x: 7, z: 44 },    // 落ちたときに戻る場所（そりの横）
 };
 // ===== 当たり判定（three.js に依存しない。verify から直接試す） =====
 // 箱は {minX,maxX,minY,maxY,minZ,maxZ}。街の当たり判定はすべてこの箱で表す。
@@ -295,6 +301,66 @@ function cameraPlace(target, yaw, pitch, boxes, want) {
   }
   dist = Math.max(CFG.camMinDist, dist);
   return { x: target.x + dir.x * dist, y: target.y + dir.y * dist, z: target.z + dir.z * dist, dist, dir };
+}
+// ===== 配達の進み具合（three.js に依存しない） =====
+// state: 'play'（ふつう）／'dropped'（プレゼントを落とした。dropDelay 秒後に受け取り地点から再開）
+function newRun() {
+  return { carrying: false, state: 'play', timer: 0, drops: 0, crossed: false };
+}
+
+// 受け取り地点 p の近く（横 pickupRange 以内、高さ 2m 未満）にいるか
+function nearPickup(s, p) {
+  return Math.hypot(s.pos.x - p.x, s.pos.z - p.z) <= CFG.pickupRange && Math.abs(s.pos.y - (p.y || 0)) < 2;
+}
+
+// E を押したとき。受け取れたら true
+function tryPickup(run, s, p) {
+  if (run.state !== 'play' || run.carrying || !nearPickup(s, p)) return false;
+  run.carrying = true;
+  return true;
+}
+
+// サンタを場所 p に置き直す（勢いも消す）
+function placeAt(s, p) {
+  s.pos = { x: p.x, y: p.y || 0, z: p.z };
+  s.vel = { x: 0, y: 0, z: 0 };
+  s.onGround = false;
+  s.jumpBuf = 0;
+  s.coyote = 0;
+}
+
+// プレゼントを落とす。川に落ちたときのほか、Phase 5〜6 のギミックからも呼ぶ。落としたら true
+function dropPresent(run) {
+  if (!run.carrying || run.state !== 'play') return false;
+  run.carrying = false;
+  run.state = 'dropped';
+  run.timer = CFG.dropDelay;
+  run.drops++;
+  return true;
+}
+
+// 毎フレーム呼ぶ。返り値は起きたこと:
+// 'dropped'（持ったまま落ちた）／'fell'（持たずに落ちた。すぐ戻した）／'respawn'（落とした後、受け取り地点に戻した）／null
+function stepRun(run, s, dt, respawn) {
+  if (run.state === 'dropped') {
+    run.timer -= dt;
+    if (run.timer > 0) return null;
+    placeAt(s, respawn);
+    run.state = 'play';
+    run.carrying = true;   // 受け取り地点から、プレゼントを持った状態でやり直し
+    return 'respawn';
+  }
+  if (s.pos.y >= CFG.fallY) return null;
+  if (dropPresent(run)) return 'dropped';
+  placeAt(s, respawn);
+  return 'fell';
+}
+
+// 持ったまま向こう岸に立った瞬間に 1 回だけ true（Phase 4 で配達に置き換える仮のゴール）
+function checkCrossed(run, s) {
+  if (run.crossed || !run.carrying || !s.onGround || s.pos.z > -COURSE.riverHalf) return false;
+  run.crossed = true;
+  return true;
 }
 // ===== 音（Web Audio で自作。ファイルは使わない） =====
 const SND = { ctx: null, out: null, noise: null };
@@ -853,6 +919,35 @@ function lockPointer(canvas) {
   if (!canvas.requestPointerLock) return;
   const p = canvas.requestPointerLock();
   if (p && p.catch) p.catch(() => {});
+}
+// ===== 画面の文字（目的・お知らせ・操作の案内） =====
+const HUD = { toastTimer: 0 };
+
+// 左上の「いまやること」。空文字なら隠す
+function setObjective(text) {
+  document.getElementById('objText').textContent = text;
+  document.getElementById('obj').classList.toggle('on', !!text);
+}
+
+// 画面中央の大きなお知らせ。sec 秒で消える
+function showToast(text, sec) {
+  const el = document.getElementById('toast');
+  el.textContent = text;
+  el.classList.add('on');
+  HUD.toastTimer = sec || 2;
+}
+
+// 下の操作の案内（「E で受け取る」など）。null なら隠す
+function setPrompt(text) {
+  const el = document.getElementById('prompt');
+  if (el.textContent !== (text || '')) el.textContent = text || '';
+  el.classList.toggle('on', !!text);
+}
+
+function updateHud(dt) {
+  if (HUD.toastTimer <= 0) return;
+  HUD.toastTimer -= dt;
+  if (HUD.toastTimer <= 0) document.getElementById('toast').classList.remove('on');
 }
 // ===== 起動とメインループ =====
 (function boot() {

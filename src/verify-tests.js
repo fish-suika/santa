@@ -311,6 +311,85 @@ test('川: 28m の建物の屋上から走って跳べば届く', () => {
   eq(tryCross(28), true);
 });
 
+// ===== プレゼント =====
+const PICK = { x: 0, z: 0 }, RESP = { x: 1, z: 0 };
+function carryingRun() { const r = newRun(); r.carrying = true; return r; }
+
+test('tryPickup: そりから離れていると受け取れない', () => {
+  const r = newRun(), s = newSanta(5, 0);
+  eq(tryPickup(r, s, PICK), false);
+  eq(r.carrying, false);
+});
+
+test('tryPickup: 近ければ受け取れる。二度目は false', () => {
+  const r = newRun(), s = newSanta(1.5, 1);
+  eq(tryPickup(r, s, PICK), true);
+  eq(r.carrying, true);
+  eq(tryPickup(r, s, PICK), false);
+});
+
+test('tryPickup: 真上の高い所（屋根の上など）からは受け取れない', () => {
+  const r = newRun(), s = newSanta(0, 0);
+  s.pos.y = 5;
+  eq(tryPickup(r, s, PICK), false);
+});
+
+test('stepRun: 落ちていなければ何も起きない', () => {
+  const r = carryingRun(), s = newSanta(3, 3);
+  eq(stepRun(r, s, 1 / 60, RESP), null);
+  eq(r.carrying, true);
+});
+
+test('stepRun: 持ったまま川に落ちると dropped。プレゼントは手を離れる', () => {
+  const r = carryingRun(), s = newSanta(3, 3);
+  s.pos.y = -1.5;
+  eq(stepRun(r, s, 1 / 60, RESP), 'dropped');
+  eq(r.carrying, false);
+  eq(r.state, 'dropped');
+  eq(r.drops, 1);
+});
+
+test('stepRun: 落としてから dropDelay 秒で受け取り地点へ戻り、プレゼントを持った状態から', () => {
+  const r = carryingRun(), s = newSanta(3, 3);
+  s.pos.y = -1.5;
+  stepRun(r, s, 1 / 60, RESP);
+  let res = null, t = 0;
+  while (!res && t < 5) { res = stepRun(r, s, 1 / 60, RESP); t += 1 / 60; }
+  eq(res, 'respawn');
+  near(t, CFG.dropDelay, 0.05);
+  eq(r.carrying, true);
+  eq(r.state, 'play');
+  eq(r.drops, 1, '落ちている間に何度呼んでも 1 回');
+  eq([s.pos.x, s.pos.y, s.pos.z], [1, 0, 0]);
+  eq([s.vel.x, s.vel.y, s.vel.z], [0, 0, 0]);
+});
+
+test('stepRun: 持たずに落ちたら、すぐ受け取り地点へ戻る（fell）', () => {
+  const r = newRun(), s = newSanta(3, 3);
+  s.pos.y = -1.5;
+  eq(stepRun(r, s, 1 / 60, RESP), 'fell');
+  eq([s.pos.x, s.pos.y, s.pos.z], [1, 0, 0]);
+  eq(r.state, 'play');
+  eq(r.drops, 0);
+});
+
+test('dropPresent: 持っていれば落とす。持っていなければ何もしない', () => {
+  const r = carryingRun();
+  eq(dropPresent(r), true);
+  eq(r.state, 'dropped');
+  eq(dropPresent(r), false, '落とした後はもう落とせない');
+  eq(dropPresent(newRun()), false);
+});
+
+test('checkCrossed: 持って向こう岸に立った瞬間だけ true。持っていなければ false', () => {
+  const s = newSanta(0, -COURSE.riverHalf - 3);
+  s.onGround = true;
+  eq(checkCrossed(newRun(), s), false);
+  const r = carryingRun();
+  eq(checkCrossed(r, s), true);
+  eq(checkCrossed(r, s), false);
+});
+
 // ===== 結果表示 =====
 (function () {
   const out = document.getElementById('out');
