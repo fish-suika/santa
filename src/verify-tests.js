@@ -618,6 +618,14 @@ test('updateCar: 離れていれば何も起きない', () => {
   eq(updateCar(c, s, 1 / 60), null);
 });
 
+test('newCar: at を渡すとその位置から、z1 の向きへ走り出す', () => {
+  const c = newCar(0, 58, 12, 10, 30);
+  eq(c.z, 30);
+  near(c.boxes[0].minZ, 30 - 2.1, 1e-9);
+  moveCar(c, 0.5);
+  near(c.z, 25, 1e-9);
+});
+
 // ===== 結果表示 =====
 (function () {
   const out = document.getElementById('out');

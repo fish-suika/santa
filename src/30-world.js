@@ -185,18 +185,22 @@ function cut(z0, z1, bedY, bedMat) {
   deco(new THREE.PlaneGeometry(200, -bedY), mat(0x55586a), 0, bedY / 2, loZ + 0.01);
 }
 
-// z0〜z1 の道路（x = -4〜4）と両側の歩道（高さ 0.15m）
+// z0〜z1 の車道（x = -8〜8、4 車線）と両側の歩道（x = ±8〜10、高さ 0.15m）
 function road(z0, z1) {
   const zc = (z0 + z1) / 2, d = Math.abs(z1 - z0);
-  const r = deco(new THREE.PlaneGeometry(8, d), mat(COL.road), 0, 0.01, zc);
+  const r = deco(new THREE.PlaneGeometry(16, d), mat(COL.road), 0, 0.01, zc);
   r.rotation.x = -Math.PI / 2;
-  solid(5, 0, zc, 2, 0.15, d, mat(COL.walk));
-  solid(-5, 0, zc, 2, 0.15, d, mat(COL.walk));
+  for (const lx of [-3.75, 0, 3.75]) {   // 車線の白線（見た目だけ）
+    const ln = deco(new THREE.PlaneGeometry(0.15, d), mat(0x9aa3b5), lx, 0.015, zc);
+    ln.rotation.x = -Math.PI / 2;
+  }
+  solid(9, 0, zc, 2, 0.15, d, mat(COL.walk));
+  solid(-9, 0, zc, 2, 0.15, d, mat(COL.walk));
 }
 
-// 通行止めの柵（道路の端。歩いては出られない。跳べば越えられる）
+// 通行止めの柵（車道の端。歩いては出られない。跳べば越えられる）
 function barrier(z) {
-  solid(0, 0, z, 8, 1.0, 0.3, mat(0xe0913a));
+  solid(0, 0, z, 16, 1.0, 0.3, mat(0xe0913a));
 }
 
 // 商店街の店。平屋根で、道路側（x = 0 の側）に明るいショーウィンドウ・看板・ひさし
@@ -288,24 +292,22 @@ function buildWorld() {
   house(-17, 30, 9, 8, 4.5, 0xc9b79c);           // ★ 1 軒目
   house(-32, 46, 8, 8, 4.5, 0xd1b0c4);
   house(30, 48, 10, 9, 5, 0xb88f86);
-  car(2, 30, false, 0xc0392b);
   tree(-28, 20, 1); tree(36, 32, 1.1); tree(-36, 56, 1);
-  lamp(7, 20, true); lamp(-7, 38);
+  lamp(10.5, 20, true); lamp(-10.5, 38);
 
   // ======== 2 商店街（z = -7〜-55） ========
   road(-R, RL.z0);
   barrier(-R - 0.6);                             // 線路側には柵を置かない（岸の縁から列車へ跳ぶので、柵があると踏み切れる幅が狭くなる）
-  shop(12, -14, 10, 8, 6, 0xb5655a, 0xff5a5a);
-  shop(12, -26, 10, 8, 7, 0x6f8fb0, 0x5ad1ff);
-  shop(12, -38, 10, 8, 6, 0xc29a5b, 0xffd45a);
-  shop(-12, -14, 10, 8, 7, 0x7fa37a, 0x8dff7a);
-  shop(-12, -40, 10, 8, 6, 0x9b7fb0, 0xff8de8);
+  shop(15, -14, 10, 8, 6, 0xb5655a, 0xff5a5a);
+  shop(15, -26, 10, 8, 7, 0x6f8fb0, 0x5ad1ff);
+  shop(15, -38, 10, 8, 6, 0xc29a5b, 0xffd45a);
+  shop(-15, -14, 10, 8, 7, 0x7fa37a, 0x8dff7a);
+  shop(-15, -40, 10, 8, 6, 0x9b7fb0, 0xff8de8);
   house(-20, -30, 9, 8, 5, 0xd8c3a5);            // ★ 2 軒目（店の並びの家）
   // 線路は、岸から止まっている列車の屋根へ跳び、そこから向こう岸へ跳んで渡る（川とは違う遊び）
   shop(28, -30, 10, 8, 7, 0xa0806a, 0xffa05a);
   shop(26, -41, 12, 8, 5, 0x8a6a5a, 0xffffff);   // 駅舎（見た目は店と同じ作り。看板は白）
-  car(-2, -24, false, 0x2e86c1);
-  lamp(5, -20, true);
+  lamp(9.5, -20, true);
 
   // ======== 3 公園（z = -69〜-115） ========
   xmasTree(0, -90);
@@ -327,7 +329,7 @@ function buildWorld() {
   building(12, -146, 8, 8, 9, 0x7d8aa3);         // 9m。屋上から西へ跳べば高架（18m）に乗れる
   car(-8, -150, false, 0x27ae60);
   tree(-32, -150, 1); tree(32, -150, 1.1);
-  lamp(6, -125, true);
+  lamp(10.5, -125, true);
   // 高架道路（上面 18m、x = -5〜5、z = -140〜-208）。谷を渡る唯一の道
   const deckLen = DK.z0 - DK.z1, deckZ = (DK.z0 + DK.z1) / 2;
   solid(0, DK.h - 1.5, deckZ, 10, 1.5, deckLen, mat(0x6d7280));

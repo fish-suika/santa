@@ -98,7 +98,13 @@
       santaStep(santa, mv, CAM.yaw, dt, PHYS.boxes);
       if (checkWires(santa, COURSE.wires, dt)) {
         sndBoing();
-        showToast('電線に引っかかった！', 1.0);
+        if (dropPresent(run)) {
+          throwPresent(sm);
+          sndDrop();
+          showToast('電線に引っかかって、プレゼントを落とした！', CFG.dropDelay);
+        } else {
+          showToast('電線に引っかかった！', 1.0);
+        }
       }
       if (santa.jumped) { santa.jumped = false; sndJump(); }
       if (santa.landSpeed > 0) {

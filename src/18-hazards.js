@@ -25,12 +25,13 @@ function checkWires(s, wires, dt) {
   return false;
 }
 
-// 走る車。x は固定で、z0 から走り出して z0〜z1 を行き来する。
+// 走る車。x は固定。at（省略なら z0）から走り出し、まず z1 の向きへ進み、z0〜z1 を行き来する。
 // boxes は当たり判定（[0] 車体、[1] 屋根）。PHYS.boxes にも入れて動かすので、サンタが屋根に着地できる
-function newCar(x, z0, z1, speed) {
+function newCar(x, z0, z1, speed, at) {
+  const z = at === undefined ? z0 : at;
   return {
-    x, z: z0, z0, z1, speed, dir: z1 > z0 ? 1 : -1,
-    boxes: [makeBox(x, 0.35, z0, 1.9, 0.9, 4.2), makeBox(x, 1.25, z0, 1.7, 0.75, 2.3)],
+    x, z, z0, z1, speed, dir: z1 > z0 ? 1 : -1,
+    boxes: [makeBox(x, 0.35, z, 1.9, 0.9, 4.2), makeBox(x, 1.25, z, 1.7, 0.75, 2.3)],
   };
 }
 

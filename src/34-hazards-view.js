@@ -1,8 +1,7 @@
 // ===== 電線と走る車の見た目 =====
 const HZ = { wires: [], cars: [] };
 
-// 電線の束（3 本、横 0.6m おき）と、両端の電柱。電柱は道路の外（c から横 6m）に立ち、
-// 腕木を道路の上へ渡して電線を吊る（電柱は当たり判定あり。腕木と電線は見た目だけ）
+// 電線の束（3 本、横 0.6m おき）と、両端の電柱（電柱は電線の真下に立ち、当たり判定あり。腕木と電線は見た目だけ）
 function buildWires() {
   for (const w of COURSE.wires) {
     const len = Math.abs(w.a1 - w.a0), mid = (w.a0 + w.a1) / 2;
@@ -15,12 +14,9 @@ function buildWires() {
     }
     W.scene.add(g);
     for (const a of [w.a0, w.a1]) {
-      for (const sd of [-6, 6]) {
-        const px = w.ax === 'x' ? a : w.c + sd, pz = w.ax === 'x' ? w.c + sd : a;
-        solid(px, 0, pz, 0.3, w.y + 0.6, 0.3, mat(0x5a4a3a));
-      }
-      const bx = w.ax === 'x' ? a : w.c, bz = w.ax === 'x' ? w.c : a;
-      deco(new THREE.BoxGeometry(w.ax === 'x' ? 0.2 : 12.3, 0.2, w.ax === 'x' ? 12.3 : 0.2), mat(0x5a4a3a), bx, w.y + 0.25, bz);
+      const px = w.ax === 'x' ? a : w.c, pz = w.ax === 'x' ? w.c : a;
+      solid(px, 0, pz, 0.3, w.y + 0.4, 0.3, mat(0x5a4a3a));   // 電柱（歩道の上、電線の真下）
+      deco(new THREE.BoxGeometry(w.ax === 'x' ? 0.15 : 1.6, 0.15, w.ax === 'x' ? 1.6 : 0.15), mat(0x5a4a3a), px, w.y, pz);   // 腕木
     }
     w.shake = 0;
     HZ.wires.push({ w, g });
@@ -49,7 +45,7 @@ function carMesh(color) {
 
 function buildCars() {
   for (const cd of COURSE.cars) {
-    const c = newCar(cd.x, cd.z0, cd.z1, cd.speed);
+    const c = newCar(cd.x, cd.z0, cd.z1, cd.speed, cd.at);
     for (const b of c.boxes) PHYS.boxes.push(b);
     c.mesh = carMesh(cd.color);
     HZ.cars.push(c);

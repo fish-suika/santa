@@ -167,22 +167,31 @@ const COURSE = {
   canyon: { z0: -160, z1: -200 },        // 4 高架下 と 5 最後の家 の間の谷（幅 40m。高架だけが渡っている）
   deck: { h: 18, z0: -140, z1: -208 },   // 高架道路（上面の高さ 18m、x = -5〜5）
   bounds: { x: 40, zMax: 62, zMin: -250 },
-  start: { x: 0, z: 45 },
-  sleigh: { x: 9, z: 44 },               // プレゼントの受け取り地点（そり）
-  respawn: { x: 7, z: 44 },              // 1 軒目を届けるまでに落ちたら戻る場所（そりの横）
+  start: { x: 12, z: 50 },               // 歩道の東の雪の上（車道を渡らずにそりへ行ける）
+  sleigh: { x: 13, z: 44 },              // プレゼントの受け取り地点（そり）
+  respawn: { x: 11, z: 44 },             // 1 軒目を届けるまでに落ちたら戻る場所（そりの横）
   targets: [                             // 配達先の家（中心）。この順に届ける
     { x: -17, z: 30 }, { x: -20, z: -30 }, { x: -24, z: -88 }, { x: -20, z: -130 }, { x: 0, z: -232 },
   ],
-  wires: [   // 電線の束（3 本）。ax 方向に a0〜a1、もう一方の座標 c を中心に横 ±0.6m、高さ y。道路の真上に張る
-              // 道路の真ん中で跳ぶと頭をぶつける（跳びすぎ）。道路の端や歩道から跳べば当たらない
-    { ax: 'z', c: 0, a0: 14, a1: 40, y: 11 },       // 1 住宅街
-    { ax: 'z', c: 0, a0: -10, a1: -42, y: 11 },     // 2 商店街
-    { ax: 'z', c: 0, a0: -120, a1: -138, y: 11 },   // 4 高架下（高架の手前まで）
+  wires: [   // 電線の束（3 本）。ax 方向に a0〜a1、もう一方の座標 c を中心に横 ±0.6m、高さ y。両側の歩道の真上（x = ±9）
+              // 当たるとプレゼントを落とす。歩道や車道の端で跳ぶと当たる。車道の真ん中寄りから跳べば当たらない
+    { ax: 'z', c: 9, a0: 21, a1: 40, y: 11 },  { ax: 'z', c: -9, a0: 21, a1: 40, y: 11 },     // 1 住宅街
+    { ax: 'z', c: 9, a0: -10, a1: -42, y: 11 }, { ax: 'z', c: -9, a0: -10, a1: -42, y: 11 },  // 2 商店街
+    { ax: 'z', c: 9, a0: -120, a1: -138, y: 11 }, { ax: 'z', c: -9, a0: -120, a1: -138, y: 11 },  // 4 高架下
   ],
-  cars: [    // 走る車。x は固定で、z0 から走り出して z0〜z1 を行き来する
-    { x: -2, z0: 58, z1: 12, speed: 7, color: 0xf1c40f },     // 1 住宅街
-    { x: 2, z0: -10, z1: -44, speed: 7, color: 0xe67e22 },    // 2 商店街
-    { x: 2, z0: -120, z1: -157, speed: 7, color: 0x8e44ad },  // 4 高架下
+  cars: [    // 走る車。x は固定。at から走り出し、まず z1 の向きへ進み、z0〜z1 を行き来する。車線は x = -5.5, -2, 2, 5.5（1 車線に 1 台）
+    { x: -5.5, z0: 58, z1: 12, at: 58, speed: 12, color: 0xf1c40f },      // 1 住宅街
+    { x: -2, z0: 58, z1: 12, at: 25, speed: 11, color: 0x3498db },
+    { x: 2, z0: 12, z1: 58, at: 40, speed: 12.5, color: 0xe74c3c },
+    { x: 5.5, z0: 12, z1: 58, at: 15, speed: 11.5, color: 0xecf0f1 },
+    { x: -5.5, z0: -10, z1: -44, at: -10, speed: 12, color: 0xe67e22 },   // 2 商店街
+    { x: -2, z0: -10, z1: -44, at: -30, speed: 11, color: 0x1abc9c },
+    { x: 2, z0: -44, z1: -10, at: -40, speed: 12.5, color: 0x9b59b6 },
+    { x: 5.5, z0: -44, z1: -10, at: -20, speed: 11.5, color: 0xf1c40f },
+    { x: -5.5, z0: -120, z1: -157, at: -120, speed: 12, color: 0x8e44ad }, // 4 高架下
+    { x: -2, z0: -120, z1: -157, at: -140, speed: 11, color: 0xe74c3c },
+    { x: 2, z0: -157, z1: -120, at: -150, speed: 12.5, color: 0x3498db },
+    { x: 5.5, z0: -157, z1: -120, at: -125, speed: 11.5, color: 0xecf0f1 },
   ],
 };
 // ===== 当たり判定（three.js に依存しない。verify から直接試す） =====
@@ -512,12 +521,13 @@ function checkWires(s, wires, dt) {
   return false;
 }
 
-// 走る車。x は固定で、z0 から走り出して z0〜z1 を行き来する。
+// 走る車。x は固定。at（省略なら z0）から走り出し、まず z1 の向きへ進み、z0〜z1 を行き来する。
 // boxes は当たり判定（[0] 車体、[1] 屋根）。PHYS.boxes にも入れて動かすので、サンタが屋根に着地できる
-function newCar(x, z0, z1, speed) {
+function newCar(x, z0, z1, speed, at) {
+  const z = at === undefined ? z0 : at;
   return {
-    x, z: z0, z0, z1, speed, dir: z1 > z0 ? 1 : -1,
-    boxes: [makeBox(x, 0.35, z0, 1.9, 0.9, 4.2), makeBox(x, 1.25, z0, 1.7, 0.75, 2.3)],
+    x, z, z0, z1, speed, dir: z1 > z0 ? 1 : -1,
+    boxes: [makeBox(x, 0.35, z, 1.9, 0.9, 4.2), makeBox(x, 1.25, z, 1.7, 0.75, 2.3)],
   };
 }
 
@@ -916,18 +926,22 @@ function cut(z0, z1, bedY, bedMat) {
   deco(new THREE.PlaneGeometry(200, -bedY), mat(0x55586a), 0, bedY / 2, loZ + 0.01);
 }
 
-// z0〜z1 の道路（x = -4〜4）と両側の歩道（高さ 0.15m）
+// z0〜z1 の車道（x = -8〜8、4 車線）と両側の歩道（x = ±8〜10、高さ 0.15m）
 function road(z0, z1) {
   const zc = (z0 + z1) / 2, d = Math.abs(z1 - z0);
-  const r = deco(new THREE.PlaneGeometry(8, d), mat(COL.road), 0, 0.01, zc);
+  const r = deco(new THREE.PlaneGeometry(16, d), mat(COL.road), 0, 0.01, zc);
   r.rotation.x = -Math.PI / 2;
-  solid(5, 0, zc, 2, 0.15, d, mat(COL.walk));
-  solid(-5, 0, zc, 2, 0.15, d, mat(COL.walk));
+  for (const lx of [-3.75, 0, 3.75]) {   // 車線の白線（見た目だけ）
+    const ln = deco(new THREE.PlaneGeometry(0.15, d), mat(0x9aa3b5), lx, 0.015, zc);
+    ln.rotation.x = -Math.PI / 2;
+  }
+  solid(9, 0, zc, 2, 0.15, d, mat(COL.walk));
+  solid(-9, 0, zc, 2, 0.15, d, mat(COL.walk));
 }
 
-// 通行止めの柵（道路の端。歩いては出られない。跳べば越えられる）
+// 通行止めの柵（車道の端。歩いては出られない。跳べば越えられる）
 function barrier(z) {
-  solid(0, 0, z, 8, 1.0, 0.3, mat(0xe0913a));
+  solid(0, 0, z, 16, 1.0, 0.3, mat(0xe0913a));
 }
 
 // 商店街の店。平屋根で、道路側（x = 0 の側）に明るいショーウィンドウ・看板・ひさし
@@ -1019,24 +1033,22 @@ function buildWorld() {
   house(-17, 30, 9, 8, 4.5, 0xc9b79c);           // ★ 1 軒目
   house(-32, 46, 8, 8, 4.5, 0xd1b0c4);
   house(30, 48, 10, 9, 5, 0xb88f86);
-  car(2, 30, false, 0xc0392b);
   tree(-28, 20, 1); tree(36, 32, 1.1); tree(-36, 56, 1);
-  lamp(7, 20, true); lamp(-7, 38);
+  lamp(10.5, 20, true); lamp(-10.5, 38);
 
   // ======== 2 商店街（z = -7〜-55） ========
   road(-R, RL.z0);
   barrier(-R - 0.6);                             // 線路側には柵を置かない（岸の縁から列車へ跳ぶので、柵があると踏み切れる幅が狭くなる）
-  shop(12, -14, 10, 8, 6, 0xb5655a, 0xff5a5a);
-  shop(12, -26, 10, 8, 7, 0x6f8fb0, 0x5ad1ff);
-  shop(12, -38, 10, 8, 6, 0xc29a5b, 0xffd45a);
-  shop(-12, -14, 10, 8, 7, 0x7fa37a, 0x8dff7a);
-  shop(-12, -40, 10, 8, 6, 0x9b7fb0, 0xff8de8);
+  shop(15, -14, 10, 8, 6, 0xb5655a, 0xff5a5a);
+  shop(15, -26, 10, 8, 7, 0x6f8fb0, 0x5ad1ff);
+  shop(15, -38, 10, 8, 6, 0xc29a5b, 0xffd45a);
+  shop(-15, -14, 10, 8, 7, 0x7fa37a, 0x8dff7a);
+  shop(-15, -40, 10, 8, 6, 0x9b7fb0, 0xff8de8);
   house(-20, -30, 9, 8, 5, 0xd8c3a5);            // ★ 2 軒目（店の並びの家）
   // 線路は、岸から止まっている列車の屋根へ跳び、そこから向こう岸へ跳んで渡る（川とは違う遊び）
   shop(28, -30, 10, 8, 7, 0xa0806a, 0xffa05a);
   shop(26, -41, 12, 8, 5, 0x8a6a5a, 0xffffff);   // 駅舎（見た目は店と同じ作り。看板は白）
-  car(-2, -24, false, 0x2e86c1);
-  lamp(5, -20, true);
+  lamp(9.5, -20, true);
 
   // ======== 3 公園（z = -69〜-115） ========
   xmasTree(0, -90);
@@ -1058,7 +1070,7 @@ function buildWorld() {
   building(12, -146, 8, 8, 9, 0x7d8aa3);         // 9m。屋上から西へ跳べば高架（18m）に乗れる
   car(-8, -150, false, 0x27ae60);
   tree(-32, -150, 1); tree(32, -150, 1.1);
-  lamp(6, -125, true);
+  lamp(10.5, -125, true);
   // 高架道路（上面 18m、x = -5〜5、z = -140〜-208）。谷を渡る唯一の道
   const deckLen = DK.z0 - DK.z1, deckZ = (DK.z0 + DK.z1) / 2;
   solid(0, DK.h - 1.5, deckZ, 10, 1.5, deckLen, mat(0x6d7280));
@@ -1130,8 +1142,7 @@ function updateSnow(center, dt, t) {
 // ===== 電線と走る車の見た目 =====
 const HZ = { wires: [], cars: [] };
 
-// 電線の束（3 本、横 0.6m おき）と、両端の電柱。電柱は道路の外（c から横 6m）に立ち、
-// 腕木を道路の上へ渡して電線を吊る（電柱は当たり判定あり。腕木と電線は見た目だけ）
+// 電線の束（3 本、横 0.6m おき）と、両端の電柱（電柱は電線の真下に立ち、当たり判定あり。腕木と電線は見た目だけ）
 function buildWires() {
   for (const w of COURSE.wires) {
     const len = Math.abs(w.a1 - w.a0), mid = (w.a0 + w.a1) / 2;
@@ -1144,12 +1155,9 @@ function buildWires() {
     }
     W.scene.add(g);
     for (const a of [w.a0, w.a1]) {
-      for (const sd of [-6, 6]) {
-        const px = w.ax === 'x' ? a : w.c + sd, pz = w.ax === 'x' ? w.c + sd : a;
-        solid(px, 0, pz, 0.3, w.y + 0.6, 0.3, mat(0x5a4a3a));
-      }
-      const bx = w.ax === 'x' ? a : w.c, bz = w.ax === 'x' ? w.c : a;
-      deco(new THREE.BoxGeometry(w.ax === 'x' ? 0.2 : 12.3, 0.2, w.ax === 'x' ? 12.3 : 0.2), mat(0x5a4a3a), bx, w.y + 0.25, bz);
+      const px = w.ax === 'x' ? a : w.c, pz = w.ax === 'x' ? w.c : a;
+      solid(px, 0, pz, 0.3, w.y + 0.4, 0.3, mat(0x5a4a3a));   // 電柱（歩道の上、電線の真下）
+      deco(new THREE.BoxGeometry(w.ax === 'x' ? 0.15 : 1.6, 0.15, w.ax === 'x' ? 1.6 : 0.15), mat(0x5a4a3a), px, w.y, pz);   // 腕木
     }
     w.shake = 0;
     HZ.wires.push({ w, g });
@@ -1178,7 +1186,7 @@ function carMesh(color) {
 
 function buildCars() {
   for (const cd of COURSE.cars) {
-    const c = newCar(cd.x, cd.z0, cd.z1, cd.speed);
+    const c = newCar(cd.x, cd.z0, cd.z1, cd.speed, cd.at);
     for (const b of c.boxes) PHYS.boxes.push(b);
     c.mesh = carMesh(cd.color);
     HZ.cars.push(c);
@@ -1686,7 +1694,13 @@ function saveBest(v) {
       santaStep(santa, mv, CAM.yaw, dt, PHYS.boxes);
       if (checkWires(santa, COURSE.wires, dt)) {
         sndBoing();
-        showToast('電線に引っかかった！', 1.0);
+        if (dropPresent(run)) {
+          throwPresent(sm);
+          sndDrop();
+          showToast('電線に引っかかって、プレゼントを落とした！', CFG.dropDelay);
+        } else {
+          showToast('電線に引っかかった！', 1.0);
+        }
       }
       if (santa.jumped) { santa.jumped = false; sndJump(); }
       if (santa.landSpeed > 0) {
