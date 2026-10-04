@@ -976,23 +976,25 @@ function car(cx, cz, alongX, color) {
   }
 }
 
-// 木。当たり判定は幹だけ。
-function tree(x, z, s) {
-  solid(x, 0, z, 0.4 * s, 1.2 * s, 0.4 * s, mat(COL.trunk));
-  deco(new THREE.ConeGeometry(1.6 * s, 2.4 * s, 8), mat(COL.leaf), x, 2.2 * s, z);
-  deco(new THREE.ConeGeometry(1.2 * s, 2.0 * s, 8), mat(COL.leaf), x, 3.4 * s, z);
-  deco(new THREE.ConeGeometry(0.55 * s, 0.6 * s, 8), mat(COL.snow), x, 4.25 * s, z);
+// 木。当たり判定は幹だけ。y0 は土台の高さ（崖の上など。省略で 0）
+function tree(x, z, s, y0) {
+  y0 = y0 || 0;
+  solid(x, y0, z, 0.4 * s, 1.2 * s, 0.4 * s, mat(COL.trunk));
+  deco(new THREE.ConeGeometry(1.6 * s, 2.4 * s, 8), mat(COL.leaf), x, y0 + 2.2 * s, z);
+  deco(new THREE.ConeGeometry(1.2 * s, 2.0 * s, 8), mat(COL.leaf), x, y0 + 3.4 * s, z);
+  deco(new THREE.ConeGeometry(0.55 * s, 0.6 * s, 8), mat(COL.snow), x, y0 + 4.25 * s, z);
 }
 
-// 広場の大きなクリスマスツリー
-function xmasTree(x, z) {
+// 大きなクリスマスツリー（星とらせんのイルミネーション）。y0 は土台の高さ
+function xmasTree(x, z, y0) {
+  y0 = y0 || 0;
   const s = 2.2;
-  tree(x, z, s);
-  deco(new THREE.OctahedronGeometry(0.6), mat(0xffd84d, 0xffb300), x, 4.55 * s + 0.4, z);
+  tree(x, z, s, y0);
+  deco(new THREE.OctahedronGeometry(0.6), mat(0xffd84d, 0xffb300), x, y0 + 4.55 * s + 0.4, z);
   const pts = [], cols = [], c = new THREE.Color();
   for (let i = 0; i < 140; i++) {
     const t = i / 140, a = i * 0.9, r = (1 - t) * 3.4 + 0.25;
-    pts.push(x + Math.cos(a) * r, 2.2 + t * 7.4, z + Math.sin(a) * r);
+    pts.push(x + Math.cos(a) * r, y0 + 2.2 + t * 7.4, z + Math.sin(a) * r);
     c.setHex(LIGHT_COLORS[i % LIGHT_COLORS.length]);
     cols.push(c.r, c.g, c.b);
   }
@@ -1220,6 +1222,25 @@ function buildWorld() {
   solid(-28, 0, -211, 10, 7, 6, mat(0x6a6f7e));
   solid(-16, 0, -211, 10, 13, 6, mat(0x6a6f7e));
   house(0, -232, 10, 9, 6, 0xe8d2b0, 20);        // ★ 5 軒目（崖の上の最後の家）
+  // 最後の家を特別に：大きなツリー・木・崖の縁のイルミネーション・玄関のリース・暖かい明かり
+  xmasTree(13, -236, 20);
+  tree(-14, -241, 1.2, 20); tree(-20, -226, 1, 20); tree(22, -224, 1.1, 20); tree(-30, -238, 1.3, 20);
+  {
+    const pts = [], cols = [], c = new THREE.Color();
+    let k = 0;
+    for (let x = -36; x <= 36; x += 0.8) {                     // 崖の縁（z=-214）に沿って垂れ下がる電球
+      pts.push(x, 20.1 - Math.abs(Math.sin(x * 0.7)) * 0.6, -213.9);
+      c.setHex(LIGHT_COLORS[k++ % LIGHT_COLORS.length]);
+      cols.push(c.r, c.g, c.b);
+    }
+    addLights(pts, cols);
+  }
+  const wreath = deco(new THREE.TorusGeometry(0.42, 0.12, 8, 20), mat(0x2f8f4f), 0, 21.95, -227.4);   // 玄関のリース
+  deco(new THREE.BoxGeometry(0.25, 0.18, 0.08), mat(0xd8322c), 0, 21.55, -227.33);                    // リボン
+  wreath.rotation.y = 0;
+  const homeLight = new THREE.PointLight(0xffc98a, 1.6, 22, 2);
+  homeLight.position.set(0, 25, -222);
+  s.add(homeLight);
 
   // ======== 遠くの家並み（見た目だけ。街の外の両側） ========
   for (let i = 0, z = 100; z > -300; z -= 14, i++) {
