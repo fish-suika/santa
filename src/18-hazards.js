@@ -1,11 +1,11 @@
 // ===== 障害：電線と走る車（three.js に依存しない） =====
 
-// 電線 w に体が当たっているか。w は ax 方向（'x' か 'z'）に a0〜a1、もう一方の座標が c、上の線の高さ y（下の線は y-0.4）
+// 電線の束 w に体が当たっているか。w は ax 方向（'x' か 'z'）に a0〜a1、もう一方の座標 c を中心に横 ±0.6m（3 本）、高さ y
 function wireHit(s, w) {
   const r = CFG.santaHalf, o = w.ax === 'x' ? 'z' : 'x';
   if (s.pos[w.ax] + r < Math.min(w.a0, w.a1) || s.pos[w.ax] - r > Math.max(w.a0, w.a1)) return false;
-  if (Math.abs(s.pos[o] - w.c) > r + 0.1) return false;
-  return s.pos.y < w.y + 0.1 && s.pos.y + CFG.santaHeight > w.y - 0.4;
+  if (Math.abs(s.pos[o] - w.c) > r + 0.6) return false;
+  return s.pos.y < w.y + 0.1 && s.pos.y + CFG.santaHeight > w.y - 0.1;
 }
 
 // 毎フレーム呼ぶ。空中で電線に当たったら、前へ進む勢いが逆向きに 1/4 になり、真下へ落ち始める。

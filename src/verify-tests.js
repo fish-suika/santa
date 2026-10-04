@@ -543,9 +543,30 @@ test('wireHit: 空中で、体が電線の高さにあると当たる', () => {
 
 test('wireHit: 電線より上・下の線より下・端より外・横にずれていると当たらない', () => {
   eq(wireHit(airAt(0, 9.2, 0), WIRE), false, '足元が上の線より上');
-  eq(wireHit(airAt(0, 6, 0), WIRE), false, '頭が下の線（8.6）より下');
+  eq(wireHit(airAt(0, 6, 0), WIRE), false, '頭が電線（8.9）より下');
   eq(wireHit(airAt(6, 8, 0), WIRE), false, '端より外');
-  eq(wireHit(airAt(0, 8, 1), WIRE), false, '横に 1m');
+  eq(wireHit(airAt(0, 8, 0.9), WIRE), true, '横に 0.9m（束の端の線に当たる）');
+  eq(wireHit(airAt(0, 8, 1.2), WIRE), false, '横に 1.2m');
+});
+
+test('電線: 真下で跳ぶと頭をぶつけて落ちてくる（跳びすぎ）。横に 1.5m ずれて跳べば当たらない', () => {
+  const W11 = { ax: 'z', c: 0, a0: -20, a1: 20, y: 11 };
+  function jumpUnder(x) {
+    const s = newSanta(x, 0);
+    walk(s, STOP, 0, 0.2, [ground()]);
+    santaStep(s, JUMP, 0, 1 / 60, [ground()]);
+    let top = 0, hit = false;
+    for (let i = 0; i < 150; i++) {
+      santaStep(s, STOP, 0, 1 / 60, [ground()]);
+      if (checkWires(s, [W11], 1 / 60)) hit = true;
+      top = Math.max(top, s.pos.y);
+    }
+    return { hit, top };
+  }
+  const under = jumpUnder(0);
+  eq(under.hit, true, '真下');
+  eq(under.top < 11, true, '足元は電線より上に行かない。最高 ' + under.top.toFixed(1));
+  eq(jumpUnder(1.5).hit, false, '横に 1.5m');
 });
 
 test('checkWires: 引っかかると、前へ進む勢いが逆向きに 1/4 になり、下へ落ち始める', () => {
