@@ -68,13 +68,21 @@ const CFG = {
   camAirMaxH: 20,       // カメラの引き・注視点の下げは、この高さまでで頭打ち（高い屋上から川へ跳んだとき引きすぎない）
 };
 
-// ===== 試しコースの寸法 =====
+// ===== 街の配置 =====
+// 5 区画が -Z へ並ぶ。区画の間の地上の道はつながっていない
 const COURSE = {
-  riverHalf: 7,         // 凍った川の幅の半分（川は z = -7〜+7。幅 14m）
+  riverHalf: 7,                          // 1 住宅街 と 2 商店街 の間の凍った川（z = -7〜+7）
+  rail: { z0: -55, z1: -69 },            // 2 商店街 と 3 公園 の間の線路の掘割（幅 14m）
+  wall: { z: -116, h: 22, t: 2 },        // 3 公園 と 4 高架下 の間の塀（z = -115〜-117、高さ 22m）
+  canyon: { z0: -160, z1: -200 },        // 4 高架下 と 5 最後の家 の間の谷（幅 40m。高架だけが渡っている）
+  deck: { h: 18, z0: -140, z1: -208 },   // 高架道路（上面の高さ 18m、x = -5〜5）
+  bounds: { x: 40, zMax: 62, zMin: -250 },
   start: { x: 0, z: 45 },
-  sleigh: { x: 9, z: 44 },     // プレゼントの受け取り地点（そり）
-  respawn: { x: 7, z: 44 },    // 落ちたときに戻る場所（そりの横）
-  targets: [{ x: -17, z: 30 }, { x: 28, z: -38 }],   // 配達先の家（中心）。この順に届ける
+  sleigh: { x: 9, z: 44 },               // プレゼントの受け取り地点（そり）
+  respawn: { x: 7, z: 44 },              // 1 軒目を届けるまでに落ちたら戻る場所（そりの横）
+  targets: [                             // 配達先の家（中心）。この順に届ける
+    { x: -17, z: 30 }, { x: -20, z: -30 }, { x: -24, z: -88 }, { x: -20, z: -130 }, { x: 0, z: -232 },
+  ],
 };
 // ===== 当たり判定（three.js に依存しない。verify から直接試す） =====
 // 箱は {minX,maxX,minY,maxY,minZ,maxZ}。街の当たり判定はすべてこの箱で表す。
@@ -849,6 +857,33 @@ test('fmtTime: 分:秒.1桁（0.1 秒未満は切り捨て）', () => {
   eq(fmtTime(83.42), '1:23.4');
   eq(fmtTime(5), '0:05.0');
   eq(fmtTime(59.96), '0:59.9');
+});
+
+// ===== 塀（高さで越える） =====
+// 塀の手前の地面に、塀から 4m 離して高さ h の台を置き、台の上を塀へ向かって走って縁で跳ぶ。塀の上か向こうに立てたら true
+function tryOver(h) {
+  const Wl = COURSE.wall, front = Wl.z + Wl.t / 2;   // 公園側の面
+  const boxes = [makeBox(0, -4, Wl.z, 60, 4, 120), makeBox(0, 0, Wl.z, 60, Wl.h, Wl.t)];
+  if (h > 0) boxes.push(makeBox(0, 0, front + 7, 6, h, 6));   // 台は z = front+4〜front+10
+  const s = newSanta(0, front + 9);
+  s.pos.y = h;
+  walk(s, STOP, 0, 0.2, boxes);
+  let jumped = false;
+  for (let i = 0; i < 600; i++) {
+    const jump = !jumped && s.pos.z < front + 4.2;
+    if (jump) jumped = true;
+    santaStep(s, { x: 0, z: 1, jump }, 0, 1 / 60, boxes);
+    if (jumped && s.onGround) break;
+  }
+  return s.onGround && s.pos.z < front;
+}
+
+test('塀: 地面から跳んでも越えられない', () => {
+  eq(tryOver(0), false);
+});
+
+test('塀: 11m の展望台の縁から跳べば越えられる', () => {
+  eq(tryOver(11), true);
 });
 
 // ===== 結果表示 =====

@@ -473,6 +473,33 @@ test('fmtTime: 分:秒.1桁（0.1 秒未満は切り捨て）', () => {
   eq(fmtTime(59.96), '0:59.9');
 });
 
+// ===== 塀（高さで越える） =====
+// 塀の手前の地面に、塀から 4m 離して高さ h の台を置き、台の上を塀へ向かって走って縁で跳ぶ。塀の上か向こうに立てたら true
+function tryOver(h) {
+  const Wl = COURSE.wall, front = Wl.z + Wl.t / 2;   // 公園側の面
+  const boxes = [makeBox(0, -4, Wl.z, 60, 4, 120), makeBox(0, 0, Wl.z, 60, Wl.h, Wl.t)];
+  if (h > 0) boxes.push(makeBox(0, 0, front + 7, 6, h, 6));   // 台は z = front+4〜front+10
+  const s = newSanta(0, front + 9);
+  s.pos.y = h;
+  walk(s, STOP, 0, 0.2, boxes);
+  let jumped = false;
+  for (let i = 0; i < 600; i++) {
+    const jump = !jumped && s.pos.z < front + 4.2;
+    if (jump) jumped = true;
+    santaStep(s, { x: 0, z: 1, jump }, 0, 1 / 60, boxes);
+    if (jumped && s.onGround) break;
+  }
+  return s.onGround && s.pos.z < front;
+}
+
+test('塀: 地面から跳んでも越えられない', () => {
+  eq(tryOver(0), false);
+});
+
+test('塀: 11m の展望台の縁から跳べば越えられる', () => {
+  eq(tryOver(11), true);
+});
+
 // ===== 結果表示 =====
 (function () {
   const out = document.getElementById('out');
