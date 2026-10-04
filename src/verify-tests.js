@@ -500,6 +500,35 @@ test('塀: 11m の展望台の縁から跳べば越えられる', () => {
   eq(tryOver(11), true);
 });
 
+// ===== 線路（止まっている列車の屋根を中継にする） =====
+// 手前の岸を -Z へ走って縁で跳び、列車の屋根に乗れたら屋根の向こう端で跳ぶ。向こう岸に立てたら true
+function tryRail(useTrain) {
+  const RL = COURSE.rail, TR = COURSE.train, zc = (RL.z0 + RL.z1) / 2;
+  const boxes = [makeBox(0, -4, RL.z0 + 20, 60, 4, 40), makeBox(0, -4, RL.z1 - 20, 60, 4, 40)];
+  if (useTrain) boxes.push(makeBox(0, -2.5, zc, 60, TR.h, TR.w));
+  const roofY = TR.h - 2.5;
+  const s = newSanta(0, RL.z0 + 6);
+  walk(s, STOP, 0, 0.2, boxes);
+  let jumps = 0;
+  for (let i = 0; i < 900; i++) {
+    const onTrain = s.onGround && Math.abs(s.pos.y - roofY) < 0.05;
+    const jump = (jumps === 0 && s.pos.z < RL.z0 + 0.2) || (jumps === 1 && onTrain && s.pos.z < zc - TR.w / 2 + 0.3);
+    if (jump) jumps++;
+    santaStep(s, { x: 0, z: 1, jump }, 0, 1 / 60, boxes);
+    if (s.pos.y < CFG.fallY) return false;
+    if (s.onGround && s.pos.z < RL.z1) return true;
+  }
+  return false;
+}
+
+test('線路: 地面から跳んでも向こう岸には届かない', () => {
+  eq(tryRail(false), false);
+});
+
+test('線路: 止まっている列車の屋根を中継すれば渡れる', () => {
+  eq(tryRail(true), true);
+});
+
 // ===== 結果表示 =====
 (function () {
   const out = document.getElementById('out');

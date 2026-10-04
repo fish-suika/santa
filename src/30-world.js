@@ -224,6 +224,22 @@ function snowman(x, z) {
   addBox(x, 0, z, 1.0, 2.4, 1.0);
 }
 
+// 掘割の底に止まっている列車。x 方向に車両（長さ 18m）が並び、連結部（1.5m）は隙間。屋根に乗れる
+function train(zc) {
+  const TR = COURSE.train, top = -2.5 + TR.h;
+  for (let cx = -50; cx <= 50; cx += 19.5) {
+    solid(cx, -2.5, zc, 18, TR.h, TR.w, mat(0x2f6f4f));
+    deco(new THREE.BoxGeometry(18, 0.12, TR.w - 0.2), mat(COL.snow), cx, top + 0.06, zc);       // 屋根の雪
+    for (const sd of [1, -1]) {
+      deco(new THREE.BoxGeometry(18.02, 0.35, 0.05), mat(0xd8322c), cx, top - 2.6, zc + sd * (TR.w / 2 + 0.01));   // 赤い帯
+      for (let wx = -7.5; wx <= 7.5; wx += 2.5) {                                                // 明かりのついた窓
+        const win = deco(new THREE.PlaneGeometry(1.6, 1.0), mat(0x000000, COL.glass), cx + wx, top - 1.4, zc + sd * (TR.w / 2 + 0.02));
+        if (sd < 0) win.rotation.y = Math.PI;
+      }
+    }
+  }
+}
+
 function buildWorld() {
   const s = W.scene;
   s.background = new THREE.Color(0x0b1430);
@@ -250,10 +266,10 @@ function buildWorld() {
   cut(R, -R, -2.5, mat(0x9fc6e8, 0x1a2a40));             // 凍った川
   cut(RL.z0, RL.z1, -2.5, mat(0x4a4642));                 // 線路の掘割
   cut(CY.z0, CY.z1, -8, mat(0x232838));                   // 谷
-  // 線路（見た目だけ）：2 本の線路が x 方向に走る
-  for (const tz of [RL.z0 - 4, RL.z1 + 4]) for (const off of [-0.75, 0.75]) {
-    deco(new THREE.BoxGeometry(200, 0.15, 0.12), mat(0x9aa0aa), 0, -2.4, tz + off);
-  }
+  // 線路（見た目だけ）と、真ん中に止まっている列車
+  const railZ = (RL.z0 + RL.z1) / 2;
+  for (const off of [-0.75, 0.75]) deco(new THREE.BoxGeometry(200, 0.15, 0.12), mat(0x9aa0aa), 0, -2.4, railZ + off);
+  train(railZ);
   // 落ちた橋（川の両岸。見た目だけ）
   for (const sd of [1, -1]) {
     const stub = deco(new THREE.BoxGeometry(8, 0.5, 3.2), mat(0x6b5a4a), 0, -1.3, sd * (R - 1.2));
@@ -283,12 +299,11 @@ function buildWorld() {
   shop(12, -26, 10, 8, 7, 0x6f8fb0, 0x5ad1ff);
   shop(12, -38, 10, 8, 6, 0xc29a5b, 0xffd45a);
   shop(-12, -14, 10, 8, 7, 0x7fa37a, 0x8dff7a);
-  shop(-12, -44, 10, 8, 6, 0x9b7fb0, 0xff8de8);
+  shop(-12, -40, 10, 8, 6, 0x9b7fb0, 0xff8de8);
   house(-20, -30, 9, 8, 5, 0xd8c3a5);            // ★ 2 軒目（店の並びの家）
-  // 店の屋上 7m（z=-34〜-26）→ 17m（z=-52〜-40）→ 28m のデパート（川と同じく、屋上から跳べば線路を越える）
+  // 線路は、岸から止まっている列車の屋根へ跳び、そこから向こう岸へ跳んで渡る（川とは違う遊び）
   shop(28, -30, 10, 8, 7, 0xa0806a, 0xffa05a);
-  building(28, -46, 8, 12, 17, 0x8a7f96);
-  building(14, -49, 14, 12, 28, 0x9a6f6f);       // デパート（線路の縁 z=-55）
+  shop(26, -41, 12, 8, 5, 0x8a6a5a, 0xffffff);   // 駅舎（見た目は店と同じ作り。看板は白）
   car(-2, -24, false, 0x2e86c1);
   lamp(5, -20, true);
 
@@ -298,9 +313,9 @@ function buildWorld() {
   // 11m の展望台。縁（z=-111）は塀（z=-115）の 4m 手前。縁から跳べば塀を越える
   solid(18, 0, -108, 6, 11, 6, mat(0x8c7a64));
   deco(new THREE.BoxGeometry(6.2, 0.15, 6.2), mat(COL.roof), 18, 11.07, -108);
-  // 塀（高さ 22m。地面からは越えられない）
-  solid(0, 0, WL.z, 80, WL.h, WL.t, mat(0x7a4a3c));
-  deco(new THREE.BoxGeometry(80, 0.2, WL.t + 0.2), mat(COL.roof), 0, WL.h + 0.1, WL.z);
+  // 塀（高さ 22m。地面からは越えられない）（見た目の地面の端まで延ばし、横を回れそうに見えないようにする）
+  solid(0, 0, WL.z, 200, WL.h, WL.t, mat(0x7a4a3c));
+  deco(new THREE.BoxGeometry(200, 0.2, WL.t + 0.2), mat(COL.roof), 0, WL.h + 0.1, WL.z);
   snowman(8, -80); snowman(-8, -102);
   tree(-10, -75, 1); tree(28, -80, 1.1); tree(-32, -105, 1.2); tree(30, -95, 1);
   lamp(5, -85, true);
@@ -330,9 +345,9 @@ function buildWorld() {
   }
 
   // ======== 5 最後の家（z = -200〜-250） ========
-  // 高さ 20m の崖（z = -214〜-250）。高架の端（z=-208）から跳び移る。下に落ちたら 7m → 13m の段で登れる
-  solid(0, 0, -232, 80, 20, 36, mat(0x6a6f7e));
-  deco(new THREE.BoxGeometry(80, 0.2, 36), mat(COL.snow), 0, 20.1, -232);
+  // 高さ 20m の崖（z = -214〜-250）。高架の端（z=-208）から跳び移る。下に落ちたら 7m → 13m の段で登れる（見た目の地面の端まで延ばし、横を回れそうに見えないようにする）
+  solid(0, 0, -232, 200, 20, 36, mat(0x6a6f7e));
+  deco(new THREE.BoxGeometry(200, 0.2, 36), mat(COL.snow), 0, 20.1, -232);
   solid(-28, 0, -211, 10, 7, 6, mat(0x6a6f7e));
   solid(-16, 0, -211, 10, 13, 6, mat(0x6a6f7e));
   house(0, -232, 10, 9, 6, 0xe8d2b0, 20);        // ★ 5 軒目（崖の上の最後の家）
