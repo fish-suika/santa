@@ -14,6 +14,7 @@
   const START = { x: 0, z: 14 };
   const santa = newSanta(START.x, START.z);
   const sm = makeSantaMesh();
+  const mk = makeMarker();
   initInput(renderer.domElement);
 
   addEventListener('resize', () => {
@@ -43,7 +44,18 @@
       const l = takeLook();
       camLook(l.x, l.y);
       const bx = santa.pos.x, bz = santa.pos.z;
-      santaStep(santa, readMove(), CAM.yaw, dt, PHYS.boxes);
+      const mv = readMove();
+      mv.jump = takeJump();
+      santaStep(santa, mv, CAM.yaw, dt, PHYS.boxes);
+      if (santa.jumped) { santa.jumped = false; sndJump(); }
+      if (santa.landSpeed > 0) {
+        // 歩道の段差を降りたくらいの小さな着地は無視する
+        if (santa.landSpeed > 4) {
+          sndLand(Math.min(1, santa.landSpeed / 30));
+          sm.squash = Math.min(0.35, santa.landSpeed / 60);
+        }
+        santa.landSpeed = 0;
+      }
       // 雪を踏む音（地面を 1.1m 進むごと）
       if (santa.onGround) {
         walked += Math.hypot(santa.pos.x - bx, santa.pos.z - bz);
@@ -56,6 +68,7 @@
       }
     }
     updateSantaMesh(sm, santa, dt, t);
+    updateMarker(mk, santa, t);
     updateCamera(santa, dt);
     updateSnow(santa.pos, dt, t);
     renderer.render(W.scene, camera);

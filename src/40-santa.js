@@ -35,7 +35,7 @@ function makeSantaMesh() {
   add(new THREE.SphereGeometry(0.08, 10, 8), white, 0, 2.12, 0.03);                // ぼんぼり
   add(new THREE.SphereGeometry(0.38, 14, 10), mat(0x9a6a3a), 0, 1.1, 0.42);        // 背中の袋
   W.scene.add(g);
-  return { group: g, legL, legR, armL, armR, rot: 0 };
+  return { group: g, legL, legR, armL, armR, rot: 0, squash: 0 };
 }
 
 // 角度 a を b へ、最短の回り方で f の割合だけ近づける
@@ -50,8 +50,43 @@ function updateSantaMesh(sm, s, dt, t) {
   sm.group.position.set(s.pos.x, s.pos.y, s.pos.z);
   sm.rot = lerpAngle(sm.rot, s.facing, Math.min(1, dt * 14));
   sm.group.rotation.y = sm.rot;
-  const sp = Math.min(1, Math.hypot(s.vel.x, s.vel.z) / CFG.walkSpeed);
-  const sw = s.onGround ? Math.sin(t * 11) * 0.7 * sp : 0;
-  sm.legL.rotation.x = sw;  sm.legR.rotation.x = -sw;
-  sm.armL.rotation.x = -sw * 0.8; sm.armR.rotation.x = sw * 0.8;
+  if (s.onGround) {
+    const sp = Math.min(1, Math.hypot(s.vel.x, s.vel.z) / CFG.walkSpeed);
+    const sw = Math.sin(t * 11) * 0.7 * sp;
+    sm.legL.rotation.x = sw;  sm.legR.rotation.x = -sw;
+    sm.armL.rotation.x = -sw * 0.8; sm.armR.rotation.x = sw * 0.8;
+  } else {
+    // 空中：両腕を前上へ上げ、脚を少し前後に開く
+    sm.armL.rotation.x = sm.armR.rotation.x = 2.6;
+    sm.legL.rotation.x = 0.4; sm.legR.rotation.x = -0.4;
+  }
+  // 着地でつぶれて、すぐ戻る
+  sm.squash = Math.max(0, sm.squash - dt * 2.5);
+  sm.group.scale.set(1 + sm.squash * 0.5, 1 - sm.squash, 1 + sm.squash * 0.5);
+}
+
+// 真下の影（いつも）と、着地点の目印の輪（空中だけ。建物越しでも見える）
+function makeMarker() {
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.55, 24),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false, fog: false }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.renderOrder = 10;
+  W.scene.add(shadow);
+  W.scene.add(ring);
+  return { shadow, ring };
+}
+
+function updateMarker(mk, s, t) {
+  const gy = s.onGround ? s.pos.y : groundBelow(s.pos, PHYS.boxes);
+  const ok = isFinite(gy);
+  mk.shadow.visible = ok;
+  mk.ring.visible = ok && !s.onGround;
+  if (!ok) return;
+  mk.shadow.position.set(s.pos.x, gy + 0.04, s.pos.z);
+  mk.ring.position.set(s.pos.x, gy + 0.06, s.pos.z);
+  const pulse = 1 + Math.sin(t * 10) * 0.08;
+  mk.ring.scale.set(pulse, pulse, 1);
 }

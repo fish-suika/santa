@@ -326,6 +326,46 @@ function sndStep() {
   src.connect(bp); bp.connect(g); g.connect(SND.out);
   src.start(t, Math.random() * 1.5, 0.14);
 }
+
+// ジャンプ「ボヨーン」（音程が上がる）
+function sndJump() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  const o = c.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(220, t);
+  o.frequency.exponentialRampToValueAtTime(700, t + 0.22);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.22, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  o.connect(g); g.connect(SND.out);
+  o.start(t); o.stop(t + 0.32);
+}
+
+// 着地「ドスッ」。power は 0〜1（高いところから落ちたほど大きい）
+function sndLand(power) {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  const o = c.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(110, t);
+  o.frequency.exponentialRampToValueAtTime(40, t + 0.18);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.5 * power + 0.05, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+  o.connect(g); g.connect(SND.out);
+  o.start(t); o.stop(t + 0.25);
+  const src = c.createBufferSource(); src.buffer = SND.noise;
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+  const g2 = c.createGain();
+  g2.gain.setValueAtTime(0.0001, t);
+  g2.gain.exponentialRampToValueAtTime(0.4 * power + 0.05, t + 0.01);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  src.connect(lp); lp.connect(g2); g2.connect(SND.out);
+  src.start(t, Math.random() * 1.5, 0.18);
+}
 // ===== 街（見た目と当たり判定を一緒に作る） =====
 const W = { scene: null, houses: [], snow: null };
 
@@ -573,7 +613,7 @@ function makeSantaMesh() {
   add(new THREE.SphereGeometry(0.08, 10, 8), white, 0, 2.12, 0.03);                // ぼんぼり
   add(new THREE.SphereGeometry(0.38, 14, 10), mat(0x9a6a3a), 0, 1.1, 0.42);        // 背中の袋
   W.scene.add(g);
-  return { group: g, legL, legR, armL, armR, rot: 0 };
+  return { group: g, legL, legR, armL, armR, rot: 0, squash: 0 };
 }
 
 // 角度 a を b へ、最短の回り方で f の割合だけ近づける
@@ -588,13 +628,48 @@ function updateSantaMesh(sm, s, dt, t) {
   sm.group.position.set(s.pos.x, s.pos.y, s.pos.z);
   sm.rot = lerpAngle(sm.rot, s.facing, Math.min(1, dt * 14));
   sm.group.rotation.y = sm.rot;
-  const sp = Math.min(1, Math.hypot(s.vel.x, s.vel.z) / CFG.walkSpeed);
-  const sw = s.onGround ? Math.sin(t * 11) * 0.7 * sp : 0;
-  sm.legL.rotation.x = sw;  sm.legR.rotation.x = -sw;
-  sm.armL.rotation.x = -sw * 0.8; sm.armR.rotation.x = sw * 0.8;
+  if (s.onGround) {
+    const sp = Math.min(1, Math.hypot(s.vel.x, s.vel.z) / CFG.walkSpeed);
+    const sw = Math.sin(t * 11) * 0.7 * sp;
+    sm.legL.rotation.x = sw;  sm.legR.rotation.x = -sw;
+    sm.armL.rotation.x = -sw * 0.8; sm.armR.rotation.x = sw * 0.8;
+  } else {
+    // 空中：両腕を前上へ上げ、脚を少し前後に開く
+    sm.armL.rotation.x = sm.armR.rotation.x = 2.6;
+    sm.legL.rotation.x = 0.4; sm.legR.rotation.x = -0.4;
+  }
+  // 着地でつぶれて、すぐ戻る
+  sm.squash = Math.max(0, sm.squash - dt * 2.5);
+  sm.group.scale.set(1 + sm.squash * 0.5, 1 - sm.squash, 1 + sm.squash * 0.5);
+}
+
+// 真下の影（いつも）と、着地点の目印の輪（空中だけ。建物越しでも見える）
+function makeMarker() {
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.55, 24),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false, fog: false }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.renderOrder = 10;
+  W.scene.add(shadow);
+  W.scene.add(ring);
+  return { shadow, ring };
+}
+
+function updateMarker(mk, s, t) {
+  const gy = s.onGround ? s.pos.y : groundBelow(s.pos, PHYS.boxes);
+  const ok = isFinite(gy);
+  mk.shadow.visible = ok;
+  mk.ring.visible = ok && !s.onGround;
+  if (!ok) return;
+  mk.shadow.position.set(s.pos.x, gy + 0.04, s.pos.z);
+  mk.ring.position.set(s.pos.x, gy + 0.06, s.pos.z);
+  const pulse = 1 + Math.sin(t * 10) * 0.08;
+  mk.ring.scale.set(pulse, pulse, 1);
 }
 // ===== 三人称カメラ =====
-const CAM = { yaw: 0, pitch: CFG.camPitch, dist: CFG.camDist, cam: null };
+const CAM = { yaw: 0, pitch: CFG.camPitch, dist: CFG.camDist, cam: null, ty: null, tp: 0 };
 
 // マウス・タッチの動き（ラジアン）。右へ動かすと右を向き、下へ動かすと見下ろす。
 function camLook(dx, dy) {
@@ -603,8 +678,18 @@ function camLook(dx, dy) {
 }
 
 function updateCamera(s, dt) {
-  const target = { x: s.pos.x, y: s.pos.y + CFG.camLookHeight, z: s.pos.z };
-  const p = cameraPlace(target, CAM.yaw, CAM.pitch, PHYS.boxes);
+  // 空中では注視点を下げ、見下ろし角を足して、真下の着地点が画面に入るようにする
+  const gy = groundBelow(s.pos, PHYS.boxes);
+  const h = s.onGround || !isFinite(gy) ? 0 : Math.max(0, s.pos.y - gy);
+  const wantY = s.pos.y + CFG.camLookHeight - h * CFG.camAirDrop;
+  const wantP = Math.min(1, h / CFG.jumpHeight) * CFG.camAirPitch;
+  const f = Math.min(1, dt * 6);
+  CAM.ty = CAM.ty === null ? wantY : CAM.ty + (wantY - CAM.ty) * f;
+  CAM.tp += (wantP - CAM.tp) * f;
+  const pitch = Math.min(1.45, CAM.pitch + CAM.tp);
+
+  const target = { x: s.pos.x, y: CAM.ty, z: s.pos.z };
+  const p = cameraPlace(target, CAM.yaw, pitch, PHYS.boxes);
   // 壁に寄るときはすぐ、離れるときはゆっくり戻す（カメラがガクガクしないように）
   CAM.dist = p.dist < CAM.dist ? p.dist : CAM.dist + (p.dist - CAM.dist) * Math.min(1, dt * 5);
   const d = p.dir;
@@ -729,6 +814,7 @@ function lockPointer(canvas) {
   const START = { x: 0, z: 14 };
   const santa = newSanta(START.x, START.z);
   const sm = makeSantaMesh();
+  const mk = makeMarker();
   initInput(renderer.domElement);
 
   addEventListener('resize', () => {
@@ -758,7 +844,18 @@ function lockPointer(canvas) {
       const l = takeLook();
       camLook(l.x, l.y);
       const bx = santa.pos.x, bz = santa.pos.z;
-      santaStep(santa, readMove(), CAM.yaw, dt, PHYS.boxes);
+      const mv = readMove();
+      mv.jump = takeJump();
+      santaStep(santa, mv, CAM.yaw, dt, PHYS.boxes);
+      if (santa.jumped) { santa.jumped = false; sndJump(); }
+      if (santa.landSpeed > 0) {
+        // 歩道の段差を降りたくらいの小さな着地は無視する
+        if (santa.landSpeed > 4) {
+          sndLand(Math.min(1, santa.landSpeed / 30));
+          sm.squash = Math.min(0.35, santa.landSpeed / 60);
+        }
+        santa.landSpeed = 0;
+      }
       // 雪を踏む音（地面を 1.1m 進むごと）
       if (santa.onGround) {
         walked += Math.hypot(santa.pos.x - bx, santa.pos.z - bz);
@@ -771,6 +868,7 @@ function lockPointer(canvas) {
       }
     }
     updateSantaMesh(sm, santa, dt, t);
+    updateMarker(mk, santa, t);
     updateCamera(santa, dt);
     updateSnow(santa.pos, dt, t);
     renderer.render(W.scene, camera);

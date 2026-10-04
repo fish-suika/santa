@@ -38,3 +38,43 @@ function sndStep() {
   src.connect(bp); bp.connect(g); g.connect(SND.out);
   src.start(t, Math.random() * 1.5, 0.14);
 }
+
+// ジャンプ「ボヨーン」（音程が上がる）
+function sndJump() {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  const o = c.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(220, t);
+  o.frequency.exponentialRampToValueAtTime(700, t + 0.22);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.22, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  o.connect(g); g.connect(SND.out);
+  o.start(t); o.stop(t + 0.32);
+}
+
+// 着地「ドスッ」。power は 0〜1（高いところから落ちたほど大きい）
+function sndLand(power) {
+  const c = SND.ctx;
+  if (!c) return;
+  const t = c.currentTime;
+  const o = c.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(110, t);
+  o.frequency.exponentialRampToValueAtTime(40, t + 0.18);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.5 * power + 0.05, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+  o.connect(g); g.connect(SND.out);
+  o.start(t); o.stop(t + 0.25);
+  const src = c.createBufferSource(); src.buffer = SND.noise;
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+  const g2 = c.createGain();
+  g2.gain.setValueAtTime(0.0001, t);
+  g2.gain.exponentialRampToValueAtTime(0.4 * power + 0.05, t + 0.01);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  src.connect(lp); lp.connect(g2); g2.connect(SND.out);
+  src.start(t, Math.random() * 1.5, 0.18);
+}
