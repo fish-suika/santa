@@ -847,69 +847,115 @@ function buildWorld() {
   mm.position.set(-80, 70, -140);
   s.add(mm);
 
-  // ---- 地面と凍った川 ----
-  // 両岸は厚さ 4m の地面。間の z = -R〜+R が川で、落ちたらやり直し（足元が fallY より下）
-  const R = COURSE.riverHalf;
-  solid(0, -4, (R + 80) / 2, 160, 4, 80 - R, mat(COL.snow));    // 手前の岸 z = R〜80
-  solid(0, -4, -(R + 80) / 2, 160, 4, 80 - R, mat(COL.snow));   // 向こう岸 z = -80〜-R
-  const ice = deco(new THREE.PlaneGeometry(160, R * 2), mat(0x9fc6e8, 0x1a2a40), 0, -2.5, 0);
-  ice.rotation.x = -Math.PI / 2;
-  addBox(0, -6, 0, 160, 3.5, R * 2);   // 川底（氷の面）。ここに着く前に fallY でやり直しになるが、空中の目印とカメラが川の上でも働くように置く
-  const bank1 = deco(new THREE.PlaneGeometry(160, 4), mat(0x55586a), 0, -2, R - 0.01);    // 手前の岸の石垣（川側を向く）
-  bank1.rotation.y = Math.PI;
-  deco(new THREE.PlaneGeometry(160, 4), mat(0x55586a), 0, -2, -R + 0.01);                  // 向こう岸の石垣
-
-  // ---- 道路と歩道（両岸。川で途切れる） ----
+  // ======== 地面と切れ目 ========
+  const ground = (z0, z1) => solid(0, -4, (z0 + z1) / 2, 200, 4, Math.abs(z1 - z0), mat(COL.snow));
+  const R = COURSE.riverHalf, RL = COURSE.rail, CY = COURSE.canyon, WL = COURSE.wall, DK = COURSE.deck;
+  ground(110, R);              // 1 住宅街（見た目のため街の外まで）
+  ground(-R, RL.z0);           // 2 商店街
+  ground(RL.z1, CY.z0);        // 3 公園 と 4 高架下（間は塀で仕切る）
+  ground(CY.z1, -300);         // 5 最後の家（見た目のため街の外まで）
+  cut(R, -R, -2.5, mat(0x9fc6e8, 0x1a2a40));             // 凍った川
+  cut(RL.z0, RL.z1, -2.5, mat(0x4a4642));                 // 線路の掘割
+  cut(CY.z0, CY.z1, -8, mat(0x232838));                   // 谷
+  // 線路（見た目だけ）：2 本の線路が x 方向に走る
+  for (const tz of [RL.z0 - 4, RL.z1 + 4]) for (const off of [-0.75, 0.75]) {
+    deco(new THREE.BoxGeometry(200, 0.15, 0.12), mat(0x9aa0aa), 0, -2.4, tz + off);
+  }
+  // 落ちた橋（川の両岸。見た目だけ）
   for (const sd of [1, -1]) {
-    const zc = sd * (R + 80) / 2;
-    const road = deco(new THREE.PlaneGeometry(8, 80 - R), mat(COL.road), 0, 0.01, zc);
-    road.rotation.x = -Math.PI / 2;
-    solid(5, 0, zc, 2, 0.15, 80 - R, mat(COL.walk));
-    solid(-5, 0, zc, 2, 0.15, 80 - R, mat(COL.walk));
-    // 落ちた橋：道路の先で、橋の板が川へ垂れ下がっている（見た目だけ）
     const stub = deco(new THREE.BoxGeometry(8, 0.5, 3.2), mat(0x6b5a4a), 0, -1.3, sd * (R - 1.2));
     stub.rotation.x = sd * 0.75;
-    // 通行止めの柵（歩いては川へ出られない。跳べば越えられる）
-    solid(0, 0, sd * (R + 0.6), 8, 1.0, 0.3, mat(0xe0913a));
   }
 
-  // ---- 手前の岸 ----
+  // ======== 1 住宅街（z = +62〜+7） ========
+  road(62, R);
+  barrier(R + 0.6);
   sleigh(COURSE.sleigh.x, COURSE.sleigh.z);
-  // 28m のマンション（川の縁に建つ）。屋上から跳べば余裕で川を越える（約 2.5m の余り）。
-  // 地面からは届かないので、家の屋根（約 7.5m）→ 17m の建物 → 屋上と段を登る
+  // 28m のマンション（川の縁）。家の屋根（約 8m）→ 17m の中段 → 屋上 と登り、屋上から跳べば川を越える
   building(15, 13, 12, 12, 28, 0x7d8aa3);
-  building(28, 21, 8, 12, 17, 0x8a7f96);          // 中段。家の屋根から真東へ跳べば届き、ここから真西へ跳べばマンションの屋上に届く
-  house(16, 27, 9, 8, 6.5, 0x9fb7c9);           // 最初の足がかり（屋根から 17m の建物に届く）
-  // 11m の建物（川の縁）。ここから跳んでもぎりぎり届く
-  building(-14, 11, 10, 8, 11, 0xa08f7d);
-  house(-17, 30, 9, 8, 4.5, 0xc9b79c);
+  building(28, 21, 8, 12, 17, 0x8a7f96);
+  house(16, 27, 9, 8, 6.5, 0x9fb7c9);
+  building(-14, 11, 10, 8, 11, 0xa08f7d);        // 11m の建物（川の縁）。ここからはぎりぎり届く近道
+  house(-17, 30, 9, 8, 4.5, 0xc9b79c);           // ★ 1 軒目
   house(-32, 46, 8, 8, 4.5, 0xd1b0c4);
   house(30, 48, 10, 9, 5, 0xb88f86);
   car(2, 30, false, 0xc0392b);
-  tree(-28, 20, 1); tree(40, 30, 1.1); tree(-40, 60, 1);
-  lamp(7, 20); lamp(-7, 38);
+  tree(-28, 20, 1); tree(36, 32, 1.1); tree(-36, 56, 1);
+  lamp(7, 20, true); lamp(-7, 38);
 
-  // ---- 向こう岸 ----
-  house(16, -20, 9, 8, 5, 0xd8c3a5);
-  house(-18, -18, 8, 8, 4.5, 0xa9c3a0);
-  house(28, -38, 10, 9, 6.5, 0x9fb7c9);
-  house(-30, -42, 9, 8, 4.5, 0xc9b79c);
-  building(10, -50, 10, 10, 16, 0x8f7da0);
-  xmasTree(-12, -32);
-  car(-2, -26, false, 0x2e86c1);
-  tree(-36, -24, 1.2); tree(36, -16, 1); tree(-20, -56, 1.1);
-  lamp(7, -20); lamp(-7, -40);
+  // ======== 2 商店街（z = -7〜-55） ========
+  road(-R, RL.z0);
+  barrier(-R - 0.6); barrier(RL.z0 + 0.6);
+  shop(12, -14, 10, 8, 6, 0xb5655a, 0xff5a5a);
+  shop(12, -26, 10, 8, 7, 0x6f8fb0, 0x5ad1ff);
+  shop(12, -38, 10, 8, 6, 0xc29a5b, 0xffd45a);
+  shop(-12, -14, 10, 8, 7, 0x7fa37a, 0x8dff7a);
+  shop(-12, -44, 10, 8, 6, 0x9b7fb0, 0xff8de8);
+  house(-20, -30, 9, 8, 5, 0xd8c3a5);            // ★ 2 軒目（店の並びの家）
+  // 店の屋上 7m（z=-34〜-26）→ 17m（z=-52〜-40）→ 28m のデパート（川と同じく、屋上から跳べば線路を越える）
+  shop(28, -30, 10, 8, 7, 0xa0806a, 0xffa05a);
+  building(28, -46, 8, 12, 17, 0x8a7f96);
+  building(14, -49, 14, 12, 28, 0x9a6f6f);       // デパート（線路の縁 z=-55）
+  car(-2, -24, false, 0x2e86c1);
+  lamp(5, -20, true);
 
-  // 遠くの家並み（見た目だけ。街の外）
-  for (let i = 0; i < 28; i++) {
-    const a = i / 28 * Math.PI * 2, r = 78 + (i % 3) * 6, h = 6 + ((i * 7) % 5) * 2.5;
-    deco(new THREE.BoxGeometry(10, h, 10), mat(COL.far), Math.cos(a) * r, h / 2, Math.sin(a) * r);
+  // ======== 3 公園（z = -69〜-115） ========
+  xmasTree(0, -90);
+  house(-24, -88, 9, 8, 4.5, 0xa9c3a0);          // ★ 3 軒目（公園のそばの家）
+  // 11m の展望台。縁（z=-111）は塀（z=-115）の 4m 手前。縁から跳べば塀を越える
+  solid(18, 0, -108, 6, 11, 6, mat(0x8c7a64));
+  deco(new THREE.BoxGeometry(6.2, 0.15, 6.2), mat(COL.roof), 18, 11.07, -108);
+  // 塀（高さ 22m。地面からは越えられない）
+  solid(0, 0, WL.z, 80, WL.h, WL.t, mat(0x7a4a3c));
+  deco(new THREE.BoxGeometry(80, 0.2, WL.t + 0.2), mat(COL.roof), 0, WL.h + 0.1, WL.z);
+  snowman(8, -80); snowman(-8, -102);
+  tree(-10, -75, 1); tree(28, -80, 1.1); tree(-32, -105, 1.2); tree(30, -95, 1);
+  lamp(5, -85, true);
+
+  // ======== 4 高架下（z = -117〜-160） ========
+  road(WL.z - WL.t / 2, CY.z0);                  // 塀の高架下側の面（z=-117）から谷まで
+  house(-20, -130, 9, 8, 6.5, 0x9fb7c9);         // ★ 4 軒目
+  house(25, -130, 8, 8, 4.5, 0xc9b79c);
+  building(12, -146, 8, 8, 9, 0x7d8aa3);         // 9m。屋上から西へ跳べば高架（18m）に乗れる
+  car(-8, -150, false, 0x27ae60);
+  tree(-32, -150, 1); tree(32, -150, 1.1);
+  lamp(6, -125, true);
+  // 高架道路（上面 18m、x = -5〜5、z = -140〜-208）。谷を渡る唯一の道
+  const deckLen = DK.z0 - DK.z1, deckZ = (DK.z0 + DK.z1) / 2;
+  solid(0, DK.h - 1.5, deckZ, 10, 1.5, deckLen, mat(0x6d7280));
+  const dr = deco(new THREE.PlaneGeometry(8, deckLen), mat(COL.road), 0, DK.h + 0.01, deckZ);
+  dr.rotation.x = -Math.PI / 2;
+  solid(4.85, DK.h, deckZ, 0.3, 1.0, deckLen, mat(0x9aa0aa));    // 手すり
+  solid(-4.85, DK.h, deckZ, 0.3, 1.0, deckLen, mat(0x9aa0aa));
+  solid(0, 0, -150, 2, DK.h - 1.5, 2, mat(0x6d7280));            // 橋脚
+  solid(0, -8, -172, 2, DK.h + 6.5, 2, mat(0x6d7280));
+  solid(0, -8, -188, 2, DK.h + 6.5, 2, mat(0x6d7280));
+  solid(0, 0, -205, 2, DK.h - 1.5, 2, mat(0x6d7280));
+  for (let z = DK.z0 - 6; z > DK.z1; z -= 16) {                   // 高架の上の街灯（見た目だけ）
+    deco(new THREE.SphereGeometry(0.25, 10, 8), mat(0x000000, 0xffd7a0), 4.2, DK.h + 3.2, z);
+    deco(new THREE.BoxGeometry(0.15, 3.2, 0.15), mat(0x2b2f3a), 4.6, DK.h + 1.6, z);
   }
 
-  // 街の端（見えない壁。カメラは無視する）
-  const B = 58;
-  for (const b of [addBox(0, -1, B + 1, 2 * B + 4, 200, 2), addBox(0, -1, -B - 1, 2 * B + 4, 200, 2),
-                   addBox(B + 1, -1, 0, 2, 200, 2 * B + 4), addBox(-B - 1, -1, 0, 2, 200, 2 * B + 4)]) b.noCam = true;
+  // ======== 5 最後の家（z = -200〜-250） ========
+  // 高さ 20m の崖（z = -214〜-250）。高架の端（z=-208）から跳び移る。下に落ちたら 7m → 13m の段で登れる
+  solid(0, 0, -232, 80, 20, 36, mat(0x6a6f7e));
+  deco(new THREE.BoxGeometry(80, 0.2, 36), mat(COL.snow), 0, 20.1, -232);
+  solid(-28, 0, -211, 10, 7, 6, mat(0x6a6f7e));
+  solid(-16, 0, -211, 10, 13, 6, mat(0x6a6f7e));
+  house(0, -232, 10, 9, 6, 0xe8d2b0, 20);        // ★ 5 軒目（崖の上の最後の家）
+
+  // ======== 遠くの家並み（見た目だけ。街の外の両側） ========
+  for (let i = 0, z = 100; z > -300; z -= 14, i++) {
+    for (const sd of [1, -1]) {
+      const h = 6 + ((i * 7 + (sd > 0 ? 2 : 0)) % 5) * 2.5;
+      deco(new THREE.BoxGeometry(10, h, 10), mat(COL.far), sd * (62 + (i % 3) * 5), h / 2, z);
+    }
+  }
+
+  // ======== 街の端（見えない壁。カメラは無視する） ========
+  const BD = COURSE.bounds, zc = (BD.zMax + BD.zMin) / 2, zl = BD.zMax - BD.zMin;
+  for (const b of [addBox(0, -10, BD.zMax + 1, 2 * BD.x + 4, 220, 2), addBox(0, -10, BD.zMin - 1, 2 * BD.x + 4, 220, 2),
+                   addBox(BD.x + 1, -10, zc, 2, 220, zl + 4), addBox(-BD.x - 1, -10, zc, 2, 220, zl + 4)]) b.noCam = true;
 }
 
 // 雪。サンタの周り 80m 四方・高さ 40m の中を降り続け、はみ出たら反対側へ回す。
